@@ -328,6 +328,7 @@ function App() {
   const volCafeRef = useRef(localVolumeCafe)
   const volWhiteNoiseRef = useRef(localVolumeWhiteNoise)
   const alphaWavesRef = useRef(localAlphaWaves)
+  const waveAmplitudeRef = useRef(0)
 
   volRainRef.current = localVolumeRain
   volCafeRef.current = localVolumeCafe
@@ -746,6 +747,39 @@ function App() {
             }
           }
         }
+      }
+
+      // --- Audio-Reactive Sine Wave Ribbon ---
+      const waveBaseY = height - 2
+      const targetAmp = isMuted ? 0 : Math.min(40, aggregateVol * 30)
+      waveAmplitudeRef.current += (targetAmp - waveAmplitudeRef.current) * 0.035
+
+      if (waveAmplitudeRef.current > 0.5) {
+        const waveTime = performance.now() * 0.001
+        const layers = [
+          { freq: 0.008, speed: 0.8, phase: 0,          color: 'rgba(168, 85, 247, 0.2)',  lineW: 2.0 },
+          { freq: 0.012, speed: 1.2, phase: Math.PI / 3, color: 'rgba(59, 130, 246, 0.1)',  lineW: 1.5 },
+          { freq: 0.006, speed: -0.6, phase: Math.PI / 1.5, color: 'rgba(139, 92, 246, 0.15)', lineW: 1.0 },
+        ]
+        layers.forEach(l => {
+          ctx.beginPath()
+          ctx.moveTo(0, waveBaseY)
+          const freq = l.freq * (1 + aggregateVol * 0.3)
+          const amp = waveAmplitudeRef.current * (1 - layers.indexOf(l) * 0.15)
+          for (let x = 0; x <= width; x += 3) {
+            ctx.lineTo(x, waveBaseY + Math.sin(x * freq + waveTime * l.speed + l.phase) * amp)
+          }
+          ctx.strokeStyle = l.color
+          ctx.lineWidth = l.lineW
+          ctx.stroke()
+        })
+      } else {
+        ctx.beginPath()
+        ctx.moveTo(0, waveBaseY)
+        ctx.lineTo(width, waveBaseY)
+        ctx.strokeStyle = 'rgba(71, 85, 105, 0.15)'
+        ctx.lineWidth = 0.5
+        ctx.stroke()
       }
 
       animationFrameId = requestAnimationFrame(animate)
@@ -3083,7 +3117,7 @@ function App() {
 
       {/* Zen Mode Cinematic Sanctuary Overlay */}
       {isZenMode && (
-        <div className="fixed inset-0 z-50 bg-[#020408] flex flex-col items-center justify-center overflow-hidden transition-opacity duration-1000 animate-fade-in">
+        <div className="fixed inset-0 z-50 bg-[#020408] flex flex-col items-center justify-center overflow-hidden transition-opacity duration-1000 animate-fade-in animate-hrv-pacer">
           {/* Radial focal glow background pulse */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-[550px] h-[550px] rounded-full bg-gradient-to-tr from-accent-blue/10 via-accent-purple/10 to-accent-blue/10 blur-3xl opacity-20 animate-zen-breath" />
