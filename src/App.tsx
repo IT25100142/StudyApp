@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, Plus } from 'lucide-react'
+import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, Plus, Settings, X } from 'lucide-react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 function loadNum(key: string, fallback: number): number {
@@ -11,9 +11,19 @@ function loadNum(key: string, fallback: number): number {
   }
 }
 
+function loadBool(key: string, fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key)
+    return v !== null ? JSON.parse(v) : fallback
+  } catch {
+    return fallback
+  }
+}
+
 let audioCtx: AudioContext | null = null
 
-function playAlertSound() {
+function playAlertSound(enabled: boolean) {
+  if (!enabled) return
   try {
     if (!audioCtx) audioCtx = new AudioContext()
     const osc = audioCtx.createOscillator()
@@ -94,6 +104,7 @@ function getIntensity(minutes: number): 0 | 1 | 2 | 3 {
 }
 
 const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 function getDayName(date: number): string {
   return dayNames[(5 + date - 1) % 7]
@@ -133,16 +144,35 @@ const mayData: DayData[] = [
   { date: 31, dayName: getDayName(31), studyTime: '8h 45m', breakTime: '1h 02m', focusRatio: '89%', sessionsCompleted: '16 of 17', focusScore: '94%', intensity: 3 },
 ]
 
-const gridCells: (number | null)[] = [
-  null, null, null, null, null, 1, 2,
-  3, 4, 5, 6, 7, 8, 9,
-  10, 11, 12, 13, 14, 15, 16,
-  17, 18, 19, 20, 21, 22, 23,
-  24, 25, 26, 27, 28, 29, 30,
-  31, null, null, null, null, null, null,
-]
-
 const intensityColors = ['bg-intensity-0', 'bg-intensity-1', 'bg-intensity-2', 'bg-intensity-3']
+
+function generateMonthlySeed(month: number, year: number): DayData[] {
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  return Array.from({ length: daysInMonth }, (_, i) => {
+    const date = i + 1
+    const startDay = new Date(year, month, date).getDay()
+    const baseMinutes = 300 + ((date * 7 + month * 13 + year) % 300)
+    const studyH = Math.floor(baseMinutes / 60)
+    const studyM = baseMinutes % 60
+    const breakMinutes = 30 + ((date * 3 + month * 7) % 60)
+    const breakH = Math.floor(breakMinutes / 60)
+    const breakM = breakMinutes % 60
+    const sessionsTotal = 14 + (date % 4)
+    const sessionsDone = Math.min(12 + (date % 5), sessionsTotal)
+    const focus = 70 + ((date * 11 + month * 17) % 25)
+    const intensity: 0 | 1 | 2 | 3 = baseMinutes < 360 ? 0 : baseMinutes < 420 ? 1 : baseMinutes < 480 ? 2 : 3
+    return {
+      date,
+      dayName: dayNames[startDay],
+      studyTime: `${studyH}h ${studyM}m`,
+      breakTime: `${breakH}h ${breakM}m`,
+      focusRatio: `${focus}%`,
+      sessionsCompleted: `${sessionsDone} of ${sessionsTotal}`,
+      focusScore: `${focus}%`,
+      intensity,
+    }
+  })
+}
 
 interface MicroCardItem {
   icon: React.ReactNode
@@ -192,27 +222,42 @@ function App() {
 
   const [secondsElapsed, setSecondsElapsed] = useState(0)
   const [isTimerActive, setIsTimerActive] = useState(false)
+  const [currentMonth, setCurrentMonth] = useState(4)
+  const [currentYear, setCurrentYear] = useState(2026)
+  const [dailyGoalMinutes, setDailyGoalMinutes] = useState(() => loadNum('study_app_goal_minutes', 480))
+  const [soundEnabled, setSoundEnabled] = useState(() => loadBool('study_app_sound_enabled', true))
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
-  const progress = Math.min(todayStudyMinutes / 480, 1)
-  const progressPercent = Math.round((todayStudyMinutes / 480) * 100)
+  const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay()
+  const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+  const dynamicGridCells: (number | null)[] = [
+    ...Array(firstDayIndex).fill(null),
+    ...Array.from({ length: totalDaysInMonth }, (_, i) => i + 1),
+  ]
+  const isLiveMonth = currentMonth === 4 && currentYear === 2026
+  const activeMonthData = isLiveMonth ? mayData : generateMonthlySeed(currentMonth, currentYear)
+
+  const progress = Math.min(todayStudyMinutes / dailyGoalMinutes, 1)
+  const progressPercent = Math.round((todayStudyMinutes / dailyGoalMinutes) * 100)
   const totalWeeklyBreakHours = parseFloat(((358 + todayBreakMinutes) / 60).toFixed(1))
   const todaySessionsDone = sessionTasks.filter(t => t.completed).length
   const totalSessionsTarget = sessionTasks.length
   const sessionsRemaining = Math.max(totalSessionsTarget - todaySessionsDone, 0)
   const totalMonthSessions = MOCK_SESSIONS_1_30 + todaySessionsDone
 
-  const day = selectedDay === 31
+  const isLastDay = selectedDay === totalDaysInMonth
+  const day = isLiveMonth && isLastDay
     ? {
-        ...mayData[30],
+        ...activeMonthData[selectedDay - 1],
         studyTime: formatMinutes(todayStudyMinutes),
         breakTime: formatMinutes(todayBreakMinutes),
         sessionsCompleted: `${todaySessionsDone} of ${totalSessionsTarget}`,
-        focusScore: `${Math.min(Math.round((todayStudyMinutes / 480) * 100), 100)}%`,
+        focusScore: `${Math.min(Math.round((todayStudyMinutes / dailyGoalMinutes) * 100), 100)}%`,
         intensity: getIntensity(todayStudyMinutes),
       }
-    : mayData[selectedDay - 1]
+    : activeMonthData[selectedDay - 1]
 
-  const chartFocus = Math.min(Math.round((todayStudyMinutes / 480) * 100), 100)
+  const chartFocus = Math.min(Math.round((todayStudyMinutes / dailyGoalMinutes) * 100), 100)
 
   const chartData = [
     { day: 'Mon', hours: 8.5, focus: 85 },
@@ -233,7 +278,7 @@ function App() {
     } else {
       const newId = Math.max(...sessionTasks.map(t => t.id), 0) + 1
       setSessionTasks(prev => [{ id: newId, text: `Session ${newId}`, completed: true }, ...prev])
-      playAlertSound()
+      playAlertSound(soundEnabled)
     }
   }
 
@@ -241,7 +286,7 @@ function App() {
     if (mode === timerMode) return
     if (isTimerActive) setIsTimerActive(false)
     setTimerMode(mode)
-    playAlertSound()
+    playAlertSound(soundEnabled)
   }
 
   function addTask(text: string) {
@@ -255,9 +300,19 @@ function App() {
     setSessionTasks(prev => {
       const task = prev.find(t => t.id === id)
       if (!task) return prev
-      if (!task.completed) playAlertSound()
+      if (!task.completed) playAlertSound(soundEnabled)
       return prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
     })
+  }
+
+  function goPrevMonth() {
+    if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(y => y - 1) }
+    else { setCurrentMonth(m => m - 1) }
+  }
+
+  function goNextMonth() {
+    if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1) }
+    else { setCurrentMonth(m => m + 1) }
   }
 
   function resetData() {
@@ -296,7 +351,13 @@ function App() {
     localStorage.setItem('study_app_month_hours', JSON.stringify(totalMonthHours))
     localStorage.setItem('study_app_break_minutes', JSON.stringify(todayBreakMinutes))
     localStorage.setItem('study_app_tasks', JSON.stringify(sessionTasks))
-  }, [todayStudyMinutes, totalMonthHours, todayBreakMinutes, sessionTasks])
+    localStorage.setItem('study_app_goal_minutes', JSON.stringify(dailyGoalMinutes))
+    localStorage.setItem('study_app_sound_enabled', JSON.stringify(soundEnabled))
+  }, [todayStudyMinutes, totalMonthHours, todayBreakMinutes, sessionTasks, dailyGoalMinutes, soundEnabled])
+
+  useEffect(() => {
+    if (selectedDay > totalDaysInMonth) setSelectedDay(totalDaysInMonth)
+  }, [currentMonth, currentYear, totalDaysInMonth])
 
   return (
     <div className="min-h-screen bg-surface p-6 font-sans text-text-primary antialiased">
@@ -610,12 +671,12 @@ function App() {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Calendar className="h-5 w-5 text-accent-blue" />
-                <h2 className="text-lg font-semibold">May 2026</h2>
+                <h2 className="text-lg font-semibold">{monthNames[currentMonth]} {currentYear}</h2>
               </div>
               <div className="flex items-center gap-1 text-text-muted">
-                <button className="flex h-7 w-7 items-center justify-center rounded-md text-sm transition-colors hover:bg-surface hover:text-text-primary">‹</button>
-                <span className="text-xs font-medium">May 2026</span>
-                <button className="flex h-7 w-7 items-center justify-center rounded-md text-sm transition-colors hover:bg-surface hover:text-text-primary">›</button>
+                <button onClick={goPrevMonth} className="flex h-7 w-7 items-center justify-center rounded-md text-sm transition-colors hover:bg-surface hover:text-text-primary">‹</button>
+                <span className="text-xs font-medium">{monthNames[currentMonth]} {currentYear}</span>
+                <button onClick={goNextMonth} className="flex h-7 w-7 items-center justify-center rounded-md text-sm transition-colors hover:bg-surface hover:text-text-primary">›</button>
               </div>
             </div>
             {/* Day Labels */}
@@ -626,9 +687,10 @@ function App() {
             </div>
             {/* Calendar Grid */}
             <div className="mb-5 grid grid-cols-7 gap-1.5">
-              {gridCells.map((cell, i) => {
-                const dayData = cell ? mayData[cell - 1] : null
-                const intensity = cell === 31 ? getIntensity(todayStudyMinutes) : (dayData?.intensity ?? 0)
+              {dynamicGridCells.map((cell, i) => {
+                const dayData = cell ? activeMonthData[cell - 1] : null
+                const isLiveDay = isLiveMonth && cell === totalDaysInMonth
+                const intensity = isLiveDay ? getIntensity(todayStudyMinutes) : (dayData?.intensity ?? 0)
                 return cell ? (
                   <button
                     key={i}
@@ -674,12 +736,14 @@ function App() {
               <div className="mb-4 flex items-start justify-between">
                 <div>
                   <p className="text-[11px] font-medium tracking-wider text-accent-blue">SELECTED DAY</p>
-                  <p className="text-sm font-semibold text-text-primary">{day.dayName}, {day.date} May</p>
+                  <p className="text-sm font-semibold text-text-primary">{day.dayName}, {day.date} {monthNames[currentMonth]}</p>
                 </div>
-                <div className="flex items-center gap-1.5 rounded-full bg-accent-green/10 px-3 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse-soft" />
-                  <span className="text-xs font-medium text-accent-green">Active</span>
-                </div>
+                {isLiveMonth && selectedDay === totalDaysInMonth && (
+                  <div className="flex items-center gap-1.5 rounded-full bg-accent-green/10 px-3 py-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse-soft" />
+                    <span className="text-xs font-medium text-accent-green">Active</span>
+                  </div>
+                )}
               </div>
               <div className="mb-3 grid grid-cols-3 gap-4">
                 <div>
