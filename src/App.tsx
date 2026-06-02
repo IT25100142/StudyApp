@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, CheckCircle, Plus, Settings, X, CloudRain, Radio } from 'lucide-react'
+import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, CheckCircle, Plus, Settings, X, CloudRain, Radio, Keyboard } from 'lucide-react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { useTasks, useHistory, useSettings, useTodayLog, useMonthLogs, useCategories, useCategoryBreakdown, useStreak, useXpLevel, useProductivityInsights, useCalendarHeatmapData, updateDailyReflection } from './db/hooks'
 import { db } from './db/db'
@@ -115,6 +115,7 @@ function App() {
   const [completedSessionsInCycle, setCompletedSessionsInCycle] = useState(0)
   const [isLongBreak, setIsLongBreak] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isHotkeyHudOpen, setIsHotkeyHudOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#3B82F6')
   const [localAmbientVolume, setLocalAmbientVolume] = useState(ambientVolume)
@@ -127,6 +128,11 @@ function App() {
   const ambientRef = useRef<{ ctx: AudioContext; masterGain: GainNode; stop: () => void } | null>(null)
   incStudyRef.current = incrementStudy
   incBreakRef.current = incrementBreak
+
+  const handleModeSwitchRef = useRef(handleModeSwitch)
+  handleModeSwitchRef.current = handleModeSwitch
+  const completeSessionRef = useRef(completeSession)
+  completeSessionRef.current = completeSession
 
   const isDataReady = !(tasksLoading || historyLoading || settingsLoading || todayLogLoading || monthLogsLoading || categoriesLoading || breakdownLoading || streakLoading || xpLoading || insightsLoading)
 
@@ -467,6 +473,35 @@ function App() {
       ambientRef.current.ctx.currentTime,
     )
   }, [timerMode, isTimerActive, localAmbientVolume])
+
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+      const key = e.key.toLowerCase()
+      switch (key) {
+        case ' ':
+          e.preventDefault()
+          setIsTimerActive(a => !a)
+          break
+        case 's':
+          handleModeSwitchRef.current('study')
+          break
+        case 'b':
+          handleModeSwitchRef.current('break')
+          break
+        case 'c':
+          completeSessionRef.current()
+          break
+        case '?':
+          setIsHotkeyHudOpen(o => !o)
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [])
 
   async function resetData() {
     stopAmbient()
@@ -980,6 +1015,13 @@ function App() {
               <h2 className="text-lg font-semibold">This Month</h2>
               <div className="ml-auto flex items-center gap-2">
                 <button
+                  onClick={() => setIsHotkeyHudOpen(true)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-all hover:bg-surface hover:text-text-primary"
+                  title="Keyboard shortcuts"
+                >
+                  <Keyboard className="h-4 w-4" />
+                </button>
+                <button
                   onClick={resetData}
                   className="text-[11px] font-medium text-text-muted transition-all hover:text-accent-blue hover:underline"
                 >
@@ -1351,6 +1393,34 @@ function App() {
                 ))
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {isHotkeyHudOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setIsHotkeyHudOpen(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative w-full max-w-sm rounded-2xl border border-border-card bg-surface-card p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Keyboard Shortcuts</h3>
+              <button onClick={() => setIsHotkeyHudOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface hover:text-text-primary">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              {[
+                { keys: 'Space', action: 'Toggle play / pause' },
+                { keys: 'S', action: 'Switch to Study mode' },
+                { keys: 'B', action: 'Switch to Break mode' },
+                { keys: 'C', action: 'Complete current session' },
+                { keys: '?', action: 'Toggle this shortcut panel' },
+              ].map(item => (
+                <div key={item.keys} className="flex items-center justify-between rounded-lg border border-border-subtle bg-surface/50 px-4 py-3">
+                  <span className="text-sm text-text-primary">{item.action}</span>
+                  <kbd className="rounded border border-border-subtle bg-surface px-2 py-0.5 font-mono text-[10px] font-bold uppercase shadow-sm">{item.keys}</kbd>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-center text-[11px] text-text-muted">Shortcuts are disabled while typing in input fields.</p>
           </div>
         </div>
       )}

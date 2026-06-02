@@ -21,4 +21,5 @@ export const Settings: Icon
 export const X: Icon
 export const CloudRain: Icon
 export const Radio: Icon
+export const Keyboard: Icon
 }
