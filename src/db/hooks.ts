@@ -172,6 +172,121 @@ export function useTodayLog() {
   }
 }
 
+function getLocalDateString(date: Date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function useStreak() {
+  const allLogs = useLiveQuery(() => db.daily_logs.toArray())
+
+  if (allLogs === undefined) return { currentStreak: 0, isLoading: true }
+
+  const activeDateSet = new Set(
+    allLogs.filter(l => l.studyMinutes > 0).map(l => l.dateString),
+  )
+  if (activeDateSet.size === 0) return { currentStreak: 0, isLoading: false }
+
+  const today = getLocalDateString()
+  const yesterday = getLocalDateString(new Date(Date.now() - 86400000))
+
+  let cursorDate: Date
+  if (activeDateSet.has(today)) {
+    cursorDate = new Date()
+  } else if (activeDateSet.has(yesterday)) {
+    cursorDate = new Date(Date.now() - 86400000)
+  } else {
+    return { currentStreak: 0, isLoading: false }
+  }
+
+  let streak = 1
+  while (true) {
+    cursorDate.setDate(cursorDate.getDate() - 1)
+    const prev = getLocalDateString(cursorDate)
+    if (activeDateSet.has(prev)) {
+      streak++
+    } else {
+      break
+    }
+  }
+
+  return { currentStreak: streak, isLoading: false }
+}
+
+export function useXpLevel() {
+  const allLogs = useLiveQuery(() => db.daily_logs.toArray())
+
+  if (allLogs === undefined) {
+    return { level: 1, currentLevelXP: 0, xpProgressPercent: 0, lifetimeStudyMinutes: 0, totalXP: 0, isLoading: true }
+  }
+
+  const lifetimeStudyMinutes = allLogs.reduce((s, l) => s + l.studyMinutes, 0)
+  const totalXP = lifetimeStudyMinutes * 10
+  const level = Math.floor(totalXP / 1000) + 1
+  const currentLevelXP = totalXP % 1000
+  const xpProgressPercent = (currentLevelXP / 1000) * 100
+
+  return { level, currentLevelXP, xpProgressPercent, lifetimeStudyMinutes, totalXP, isLoading: false }
+}
+
+export function useProductivityInsights() {
+  const allHistory = useLiveQuery(() => db.history.toArray())
+  const allTasks = useLiveQuery(() => db.tasks.toArray())
+  const allLogs = useLiveQuery(() => db.daily_logs.toArray())
+  const categories = useLiveQuery(() => db.categories.toArray())
+
+  if (allHistory === undefined || allTasks === undefined || allLogs === undefined || categories === undefined) {
+    return { topSubject: 'None yet', avgMin: 0, completionRate: 0, peakDay: 'No data', isLoading: true }
+  }
+
+  const studyEntries = allHistory.filter(e => e.type === 'study')
+
+  const catMap = new Map<number, string>()
+  for (const c of categories) {
+    if (c.id !== undefined) catMap.set(c.id, c.name)
+  }
+
+  const catMinutes = new Map<number | undefined, number>()
+  for (const e of studyEntries) {
+    const key = e.categoryId
+    catMinutes.set(key, (catMinutes.get(key) ?? 0) + e.durationMinutes)
+  }
+
+  let topSubject = 'None yet'
+  let maxMin = 0
+  for (const [catId, minutes] of catMinutes) {
+    if (minutes > maxMin) {
+      maxMin = minutes
+      topSubject = catId !== undefined ? (catMap.get(catId) ?? 'Uncategorized') : 'Uncategorized'
+    }
+  }
+
+  const avgMin = studyEntries.length > 0
+    ? Math.round(studyEntries.reduce((s, e) => s + e.durationMinutes, 0) / studyEntries.length)
+    : 0
+
+  const totalTasks = allTasks.length
+  const completedTasks = allTasks.filter(t => t.completed).length
+  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+
+  const dayTotals = [0, 0, 0, 0, 0, 0, 0]
+  const dayNamesLocal = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  for (const log of allLogs) {
+    if (log.studyMinutes <= 0) continue
+    const [year, month, day] = log.dateString.split('-').map(Number)
+    const dayIdx = new Date(year, month - 1, day).getDay()
+    dayTotals[dayIdx] += log.studyMinutes
+  }
+
+  const maxDayMinutes = Math.max(...dayTotals)
+  const peakDayIdx = maxDayMinutes > 0 ? dayTotals.indexOf(maxDayMinutes) : -1
+  const peakDay = peakDayIdx >= 0 ? dayNamesLocal[peakDayIdx] : 'No data'
+
+  return { topSubject, avgMin, completionRate, peakDay, isLoading: false }
+}
+
 export function useMonthLogs(month: number, year: number) {
   const logs = useLiveQuery(
     () => db.daily_logs

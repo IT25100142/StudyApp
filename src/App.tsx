@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, Plus, Settings, X } from 'lucide-react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { useTasks, useHistory, useSettings, useTodayLog, useMonthLogs, useCategories, useCategoryBreakdown } from './db/hooks'
+import { useTasks, useHistory, useSettings, useTodayLog, useMonthLogs, useCategories, useCategoryBreakdown, useStreak, useXpLevel } from './db/hooks'
 import { db } from './db/db'
 
 let audioCtx: AudioContext | null = null
@@ -101,6 +101,8 @@ function App() {
   const { monthLogs, totalMonthHours, isLoading: monthLogsLoading } = useMonthLogs(currentMonth, currentYear)
   const { categories, isLoading: categoriesLoading } = useCategories()
   const { breakdown: categoryBreakdown, isLoading: breakdownLoading } = useCategoryBreakdown()
+  const { currentStreak, isLoading: streakLoading } = useStreak()
+  const { level, currentLevelXP, xpProgressPercent, isLoading: xpLoading } = useXpLevel()
   const [timerCategoryId, setTimerCategoryId] = useState<number | undefined>(undefined)
 
   const [selectedDay, setSelectedDay] = useState(() => new Date().getDate())
@@ -115,7 +117,7 @@ function App() {
   incStudyRef.current = incrementStudy
   incBreakRef.current = incrementBreak
 
-  const isDataReady = !(tasksLoading || historyLoading || settingsLoading || todayLogLoading || monthLogsLoading || categoriesLoading || breakdownLoading)
+  const isDataReady = !(tasksLoading || historyLoading || settingsLoading || todayLogLoading || monthLogsLoading || categoriesLoading || breakdownLoading || streakLoading || xpLoading)
 
   const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay()
   const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
@@ -376,6 +378,22 @@ function App() {
             <div className="mb-5 flex items-center gap-2">
               <Target className="h-5 w-5 text-accent-blue" />
               <h2 className="text-lg font-semibold">Today's Progress</h2>
+              <div className="ml-auto flex items-center gap-2 group relative">
+                <span className="rounded-md bg-accent-purple/15 px-2 py-0.5 text-xs font-bold text-accent-purple">
+                  Lv. {level}
+                </span>
+                <div className="w-20">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
+                    <div
+                      className="h-full rounded-full bg-accent-purple transition-all duration-300"
+                      style={{ width: `${xpProgressPercent}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="pointer-events-none absolute -top-8 right-0 z-10 whitespace-nowrap rounded-md border border-border-card bg-surface-card px-2 py-1 text-[11px] text-text-primary opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  {currentLevelXP} / 1000 XP to next rank
+                </div>
+              </div>
             </div>
             <div className="flex gap-8">
               {/* Left - Circular Ring + Stats */}
@@ -442,13 +460,13 @@ function App() {
                   badgeText={sessionsRemaining === 0 ? 'text-accent-blue' : 'text-accent-green'}
                 />
                 <MicroCard
-                  icon={<Zap className="h-5 w-5 text-accent-amber" />}
+                  icon={<Zap className={`h-5 w-5 ${currentStreak > 0 ? 'text-accent-amber' : 'text-text-muted'}`} />}
                   label="Streak"
-                  value="0 days"
-                  badge={{ text: 'Inactive' }}
-                  iconBg="bg-accent-amber/10"
-                  badgeBg="bg-accent-amber/10"
-                  badgeText="text-accent-amber"
+                  value={`${currentStreak} days`}
+                  badge={currentStreak > 0 ? { text: 'Active', dot: true } : { text: 'Inactive' }}
+                  iconBg={currentStreak > 0 ? 'bg-accent-amber/10' : 'bg-text-muted/10'}
+                  badgeBg={currentStreak > 0 ? 'bg-accent-amber/10' : 'bg-text-muted/10'}
+                  badgeText={currentStreak > 0 ? 'text-accent-amber' : 'text-text-muted'}
                 />
                 {/* Timer Controls */}
                 <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface/50 px-3 py-2">
