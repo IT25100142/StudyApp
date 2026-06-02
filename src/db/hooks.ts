@@ -159,7 +159,7 @@ function todayDateString(): string {
 
 export function useTodayLog() {
   const dateString = todayDateString()
-  const log = useLiveQuery(() => db.daily_logs.get(dateString))
+  const log = useLiveQuery(() => db.daily_logs.get(dateString).then(r => r ?? null), [dateString])
 
   const incrementStudy = async () => {
     const existing = await db.daily_logs.get(dateString)
