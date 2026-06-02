@@ -2,15 +2,14 @@ import { useState, useEffect } from 'react'
 import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check } from 'lucide-react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
-const weeklyData = [
-  { day: 'Mon', hours: 8.5, focus: 85 },
-  { day: 'Tue', hours: 7.8, focus: 72 },
-  { day: 'Wed', hours: 9.2, focus: 90 },
-  { day: 'Thu', hours: 8.0, focus: 78 },
-  { day: 'Fri', hours: 8.7, focus: 95 },
-  { day: 'Sat', hours: 7.5, focus: 80 },
-  { day: 'Sun', hours: 9.6, focus: 88 },
-]
+function loadNum(key: string, fallback: number): number {
+  try {
+    const v = localStorage.getItem(key)
+    return v !== null ? JSON.parse(v) : fallback
+  } catch {
+    return fallback
+  }
+}
 
 interface DayData {
   date: number
@@ -127,10 +126,10 @@ function MicroCard({ icon, label, value, badge, iconBg, badgeBg, badgeText }: Mi
 function App() {
   const [selectedDay, setSelectedDay] = useState(31)
 
-  const [todayStudyMinutes, setTodayStudyMinutes] = useState(525)
-  const [todaySessionsDone, setTodaySessionsDone] = useState(16)
-  const [totalMonthHours, setTotalMonthHours] = useState(246.8)
-  const [totalMonthSessions, setTotalMonthSessions] = useState(484)
+  const [todayStudyMinutes, setTodayStudyMinutes] = useState(() => loadNum('study_app_minutes', 525))
+  const [todaySessionsDone, setTodaySessionsDone] = useState(() => loadNum('study_app_sessions', 16))
+  const [totalMonthHours, setTotalMonthHours] = useState(() => loadNum('study_app_month_hours', 246.8))
+  const [totalMonthSessions, setTotalMonthSessions] = useState(() => loadNum('study_app_month_sessions', 484))
 
   const [secondsElapsed, setSecondsElapsed] = useState(0)
   const [isTimerActive, setIsTimerActive] = useState(false)
@@ -148,11 +147,34 @@ function App() {
       }
     : mayData[selectedDay - 1]
 
+  const chartFocus = Math.min(Math.round((todayStudyMinutes / 480) * 100), 100)
+
+  const chartData = [
+    { day: 'Mon', hours: 8.5, focus: 85 },
+    { day: 'Tue', hours: 7.8, focus: 72 },
+    { day: 'Wed', hours: 9.2, focus: 90 },
+    { day: 'Thu', hours: 8.0, focus: 78 },
+    { day: 'Fri', hours: 8.7, focus: 95 },
+    { day: 'Sat', hours: 7.5, focus: 80 },
+    { day: 'Sun', hours: parseFloat((todayStudyMinutes / 60).toFixed(1)), focus: chartFocus },
+  ]
+
   function completeSession() {
     setIsTimerActive(false)
     setSecondsElapsed(0)
     setTodaySessionsDone(s => Math.min(s + 1, 17))
     setTotalMonthSessions(s => s + 1)
+  }
+
+  function resetData() {
+    const keys = ['study_app_minutes', 'study_app_sessions', 'study_app_month_hours', 'study_app_month_sessions']
+    keys.forEach(k => localStorage.removeItem(k))
+    setTodayStudyMinutes(525)
+    setTodaySessionsDone(16)
+    setTotalMonthHours(246.8)
+    setTotalMonthSessions(484)
+    setSecondsElapsed(0)
+    setIsTimerActive(false)
   }
 
   useEffect(() => {
@@ -169,6 +191,13 @@ function App() {
     }, 1000)
     return () => clearInterval(id)
   }, [isTimerActive])
+
+  useEffect(() => {
+    localStorage.setItem('study_app_minutes', JSON.stringify(todayStudyMinutes))
+    localStorage.setItem('study_app_sessions', JSON.stringify(todaySessionsDone))
+    localStorage.setItem('study_app_month_hours', JSON.stringify(totalMonthHours))
+    localStorage.setItem('study_app_month_sessions', JSON.stringify(totalMonthSessions))
+  }, [todayStudyMinutes, todaySessionsDone, totalMonthHours, totalMonthSessions])
 
   const sessionsRemaining = Math.max(17 - todaySessionsDone, 0)
 
@@ -234,7 +263,7 @@ function App() {
                 <MicroCard
                   icon={<Brain className="h-5 w-5 text-accent-purple" />}
                   label="Focus score"
-                  value="94%"
+                  value={`${chartFocus}%`}
                   badge={{ text: '+16% avg' }}
                   iconBg="bg-accent-purple/10"
                   badgeBg="bg-accent-purple/10"
@@ -313,7 +342,7 @@ function App() {
               <div className="rounded-xl border border-border-subtle bg-surface/30 p-4">
                 <p className="mb-3 text-xs font-medium text-text-secondary">Study hours trend</p>
                 <ResponsiveContainer width="100%" height={180}>
-                  <AreaChart data={weeklyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.3} />
@@ -335,7 +364,7 @@ function App() {
               <div className="rounded-xl border border-border-subtle bg-surface/30 p-4">
                 <p className="mb-3 text-xs font-medium text-text-secondary">Daily focus bars</p>
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={weeklyData} margin={{ top: 5, right: 5, left: 5, bottom: 0 }}>
+                  <BarChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 0 }}>
                     <defs>
                       <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#3B82F6" />
@@ -362,6 +391,12 @@ function App() {
             <div className="mb-5 flex items-center gap-2">
               <Flame className="h-5 w-5 text-accent-amber" />
               <h2 className="text-lg font-semibold">This Month</h2>
+              <button
+                onClick={resetData}
+                className="ml-auto text-[11px] font-medium text-text-muted transition-all hover:text-accent-blue hover:underline"
+              >
+                Reset Data
+              </button>
             </div>
             <div className="grid grid-cols-3 divide-x divide-border-card">
               <div className="flex flex-col items-center px-4 first:pl-0">
