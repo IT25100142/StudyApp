@@ -590,14 +590,16 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-surface p-6 font-sans text-text-primary antialiased">
-      <div className="mx-auto grid max-w-[1440px] grid-cols-12 gap-6">
+    <div className="min-h-screen bg-surface font-sans text-text-primary antialiased">
+      <div className="w-full max-w-[1650px] min-h-screen mx-auto p-4 md:p-6 lg:p-8 flex flex-col justify-between">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 items-start w-full">
 
-        {/* LEFT COLUMN */}
-        <div className="col-span-7 flex flex-col gap-6">
+          {/* COLUMN 1: Focus Core Command Center */}
+          <div className="flex flex-col gap-6">
 
           {/* CARD 1: Today's Progress */}
-          <div className="rounded-2xl border border-border-card bg-surface-card p-6">
+          <div className="relative overflow-hidden rounded-xl border border-slate-800/60 bg-[#0F172A]/70 backdrop-blur-md shadow-xl p-5">
+            <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-purple-500/40 via-blue-500/40 to-transparent" />
             <div className="mb-5 flex items-center gap-2">
               <Target className="h-5 w-5 text-accent-blue" />
               <h2 className="text-lg font-semibold">Today's Progress</h2>
@@ -901,9 +903,13 @@ function App() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* COLUMN 2: Analytical Intelligence Hub */}
+        <div className="flex flex-col gap-6">
 
           {/* CARD 2: Weekly Rhythm */}
-          <div className="rounded-2xl border border-border-card bg-surface-card p-6">
+          <div className="rounded-xl border border-slate-800/60 bg-[#0F172A]/70 backdrop-blur-md shadow-xl p-5">
             <div className="mb-5 flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-accent-blue" />
               <h2 className="text-lg font-semibold">Weekly Rhythm</h2>
@@ -1009,7 +1015,7 @@ function App() {
           </div>
 
           {/* CARD 3: This Month */}
-          <div className="rounded-2xl border border-border-card bg-surface-card p-6">
+          <div className="rounded-xl border border-slate-800/60 bg-[#0F172A]/70 backdrop-blur-md shadow-xl p-5">
             <div className="mb-5 flex items-center gap-2">
               <Flame className="h-5 w-5 text-accent-amber" />
               <h2 className="text-lg font-semibold">This Month</h2>
@@ -1085,23 +1091,25 @@ function App() {
               <p className="mb-4 text-sm font-semibold text-text-primary">Category Hours</p>
               {categoryBreakdown.length > 0 ? (
                 <div className="flex items-center gap-6">
-                  <PieChart width={130} height={130}>
-                    <Pie
-                      data={categoryBreakdown}
-                      dataKey="hours"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={32}
-                      outerRadius={55}
-                      paddingAngle={2}
-                      stroke="none"
-                    >
-                      {categoryBreakdown.map((entry, index) => (
-                        <Cell key={index} fill={entry.color} />
-                      ))}
-                    </Pie>
-                  </PieChart>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <PieChart>
+                      <Pie
+                        data={categoryBreakdown}
+                        dataKey="hours"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={32}
+                        outerRadius={55}
+                        paddingAngle={2}
+                        stroke="none"
+                      >
+                        {categoryBreakdown.map((entry, index) => (
+                          <Cell key={index} fill={entry.color} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
                   <div className="flex flex-col gap-2">
                     {categoryBreakdown.map((item, i) => (
                       <div key={i} className="flex items-center gap-2 text-xs">
@@ -1122,11 +1130,11 @@ function App() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div className="col-span-5">
+        {/* COLUMN 3: Historical Ledger & Reflection Space */}
+        <div className="flex flex-col gap-6">
 
           {/* CARD 4: Monthly Overview */}
-          <div className="flex h-full flex-col rounded-2xl border border-border-card bg-surface-card p-6">
+          <div className="flex flex-col rounded-xl border border-slate-800/60 bg-[#0F172A]/70 backdrop-blur-md shadow-xl p-5">
             {/* Month Header */}
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1265,12 +1273,12 @@ function App() {
             </div>
           </div>
         </div>
-
       </div>
-      {isSettingsOpen && (
+    </div>
+    {isSettingsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setIsSettingsOpen(false)}>
           <div className="absolute inset-0 bg-black/50" />
-          <div className="relative w-full max-w-md rounded-2xl border border-border-card bg-surface-card p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="relative w-full max-w-md rounded-xl border border-slate-800/60 bg-[#0F172A]/70 backdrop-blur-md shadow-xl p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="mb-5 flex items-center justify-between">
               <h3 className="text-lg font-semibold">Settings</h3>
               <button onClick={() => setIsSettingsOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface hover:text-text-primary">
@@ -1399,7 +1407,7 @@ function App() {
       {isHotkeyHudOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setIsHotkeyHudOpen(false)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-sm rounded-2xl border border-border-card bg-surface-card p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="relative w-full max-w-sm rounded-xl border border-slate-800/60 bg-[#0F172A]/70 backdrop-blur-md shadow-xl p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="mb-5 flex items-center justify-between">
               <h3 className="text-lg font-semibold">Keyboard Shortcuts</h3>
               <button onClick={() => setIsHotkeyHudOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface hover:text-text-primary">
