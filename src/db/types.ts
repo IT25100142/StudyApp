@@ -10,6 +10,8 @@ export interface TaskItem {
   completed: boolean
   createdAt: number
   categoryId?: number
+  estimatedPomodoros: number
+  actualPomodoros: number
 }
 
 export interface HistoryEntry {
@@ -28,9 +30,9 @@ export interface DailyLog {
   mood?: string
 }
 
-export type SettingsKey = 'dailyGoalMinutes' | 'soundEnabled' | 'targetSessionsPerCycle' | 'longBreakDurationMinutes'
+export type SettingsKey = 'dailyGoalMinutes' | 'soundEnabled' | 'targetSessionsPerCycle' | 'longBreakDurationMinutes' | 'ambientTrack' | 'ambientVolume'
 
 export interface SettingsRow {
   key: SettingsKey
-  value: number | boolean
+  value: number | boolean | string
 }

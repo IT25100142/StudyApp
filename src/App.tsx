@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, CheckCircle, Plus, Settings, X } from 'lucide-react'
+import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, CheckCircle, Plus, Settings, X, CloudRain, Radio } from 'lucide-react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { useTasks, useHistory, useSettings, useTodayLog, useMonthLogs, useCategories, useCategoryBreakdown, useStreak, useXpLevel, useProductivityInsights, updateDailyReflection } from './db/hooks'
 import { db } from './db/db'
@@ -86,15 +86,15 @@ function MicroCard({ icon, label, value, badge, iconBg, badgeBg, badgeText }: Mi
       <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 ${badgeBg}`}>
         {badge.dot && <span className="h-1.5 w-1.5 rounded-full bg-accent-amber animate-pulse-soft" />}
         <span className={`text-xs font-medium ${badgeText}`}>{badge.text}</span>
-      </div>
-    </div>
+                </div>
+              </div>
   )
 }
 
 function App() {
-  const { tasks: sessionTasks, addTask, toggleTask, isLoading: tasksLoading } = useTasks()
+  const { tasks: sessionTasks, addTask, toggleTask, incrementTaskPomodoro, isLoading: tasksLoading } = useTasks()
   const { history: sessionHistory, addEntry: addHistoryEntry, isLoading: historyLoading } = useHistory()
-  const { dailyGoalMinutes, soundEnabled, updateSetting, targetSessionsPerCycle, longBreakDurationMinutes, isLoading: settingsLoading } = useSettings()
+  const { dailyGoalMinutes, soundEnabled, updateSetting, targetSessionsPerCycle, longBreakDurationMinutes, ambientTrack, ambientVolume, isLoading: settingsLoading } = useSettings()
   const { studyMinutes: todayStudyMinutes, breakMinutes: todayBreakMinutes, incrementStudy, incrementBreak, isLoading: todayLogLoading } = useTodayLog()
   const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth())
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear())
@@ -115,10 +115,14 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#3B82F6')
+  const [localAmbientVolume, setLocalAmbientVolume] = useState(ambientVolume)
+  const [activeTaskId, setActiveTaskId] = useState<number | null>(null)
+  const [taskPomodoroCount, setTaskPomodoroCount] = useState(1)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const completingRef = useRef(false)
   const incStudyRef = useRef(incrementStudy)
   const incBreakRef = useRef(incrementBreak)
+  const ambientRef = useRef<{ ctx: AudioContext; masterGain: GainNode; stop: () => void } | null>(null)
   incStudyRef.current = incrementStudy
   incBreakRef.current = incrementBreak
 
@@ -257,6 +261,9 @@ function App() {
       if (justAdded?.id !== undefined) await toggleTask(justAdded.id)
     }
     playAlertSound(soundEnabled)
+    if (mode === 'study' && activeTaskId !== null) {
+      await incrementTaskPomodoro(activeTaskId)
+    }
     completingRef.current = false
 
     if (mode === 'study') {
@@ -284,16 +291,17 @@ function App() {
     playAlertSound(soundEnabled)
   }
 
-  function handleAddTask(text: string, categoryId?: number) {
+  function handleAddTask(text: string, categoryId?: number, estimatedPomodoros?: number) {
     const trimmed = text.trim()
     if (!trimmed) return
-    addTask(trimmed, categoryId)
+    addTask(trimmed, categoryId, estimatedPomodoros ?? taskPomodoroCount)
   }
 
   function handleToggleTask(id: number) {
     const task = sessionTasks.find(t => t.id === id)
     if (task && !task.completed) playAlertSound(soundEnabled)
     toggleTask(id)
+    if (activeTaskId === id) setActiveTaskId(null)
   }
 
   function handleNotesChange(value: string) {
@@ -345,7 +353,119 @@ function App() {
     return () => clearInterval(id)
   }, [isTimerActive, timerMode])
 
+  useEffect(() => {
+    setLocalAmbientVolume(ambientVolume)
+  }, [ambientVolume])
+
+  function createAmbientTrack(ctx: AudioContext, track: string): { output: AudioNode; stop: () => void } | null {
+    if (track === 'white-noise') {
+      const bufSize = ctx.sampleRate * 2
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate)
+      const d = buf.getChannelData(0)
+      for (let i = 0; i < bufSize; i++) d[i] = Math.random() * 2 - 1
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.loop = true
+      src.start()
+      return { output: src, stop: () => { try { src.stop() } catch {} } }
+    }
+    if (track === 'rain') {
+      const bufSize = ctx.sampleRate * 2
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate)
+      const d = buf.getChannelData(0)
+      let lastOut = 0
+      for (let i = 0; i < bufSize; i++) {
+        const white = Math.random() * 2 - 1
+        d[i] = (lastOut + 0.02 * white) / 1.02
+        lastOut = d[i]
+        d[i] *= 3.5
+      }
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.loop = true
+      src.start()
+      const filter = ctx.createBiquadFilter()
+      filter.type = 'lowpass'
+      filter.frequency.value = 600
+      const lfo = ctx.createOscillator()
+      lfo.frequency.value = 0.2
+      const lfoGain = ctx.createGain()
+      lfoGain.gain.value = 0.2
+      lfo.connect(lfoGain)
+      const ampGain = ctx.createGain()
+      ampGain.gain.value = 0.48
+      lfoGain.connect(ampGain.gain)
+      lfo.start()
+      src.connect(filter)
+      filter.connect(ampGain)
+      return { output: ampGain, stop: () => { try { src.stop(); lfo.stop() } catch {} } }
+    }
+    if (track === 'cafe') {
+      const bufSize = ctx.sampleRate * 2
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate)
+      const d = buf.getChannelData(0)
+      for (let i = 0; i < bufSize; i++) d[i] = Math.random() * 2 - 1
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.loop = true
+      src.start()
+      const bandpass = ctx.createBiquadFilter()
+      bandpass.type = 'bandpass'
+      bandpass.frequency.value = 900
+      bandpass.Q.value = 0.4
+      const gain = ctx.createGain()
+      gain.gain.value = 0.25
+      src.connect(bandpass)
+      bandpass.connect(gain)
+      return { output: gain, stop: () => { try { src.stop() } catch {} } }
+    }
+    return null
+  }
+
+  function startAmbient(track: string, volume: number) {
+    if (ambientRef.current) {
+      try { ambientRef.current.stop() } catch {}
+      ambientRef.current = null
+    }
+    if (track === 'none') return
+    const ctx = new AudioContext()
+    const masterGain = ctx.createGain()
+    masterGain.gain.value = 0
+    masterGain.connect(ctx.destination)
+    const result = createAmbientTrack(ctx, track)
+    if (result) {
+      result.output.connect(masterGain)
+      const shouldPlay = timerMode === 'study' && isTimerActive
+      masterGain.gain.value = shouldPlay ? volume : 0
+      ambientRef.current = { ctx, masterGain, stop: () => { result.stop(); ctx.close() } }
+    } else {
+      ctx.close()
+    }
+  }
+
+  function stopAmbient() {
+    if (ambientRef.current) {
+      try { ambientRef.current.stop() } catch {}
+      ambientRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    startAmbient(ambientTrack, localAmbientVolume)
+    return () => stopAmbient()
+  }, [ambientTrack])
+
+  useEffect(() => {
+    if (!ambientRef.current) return
+    const shouldPlay = timerMode === 'study' && isTimerActive
+    ambientRef.current.masterGain.gain.setValueAtTime(
+      shouldPlay ? localAmbientVolume : 0,
+      ambientRef.current.ctx.currentTime,
+    )
+  }, [timerMode, isTimerActive, localAmbientVolume])
+
   async function resetData() {
+    stopAmbient()
     await db.tasks.clear()
     await db.history.clear()
     await db.daily_logs.clear()
@@ -356,6 +476,8 @@ function App() {
       { key: 'soundEnabled', value: true },
       { key: 'targetSessionsPerCycle', value: 4 },
       { key: 'longBreakDurationMinutes', value: 15 },
+      { key: 'ambientTrack', value: 'none' },
+      { key: 'ambientVolume', value: 0.5 },
     ])
     await db.categories.bulkAdd([
       { name: 'General', color: '#64748B' },
@@ -368,6 +490,8 @@ function App() {
     setTimerCategoryId(undefined)
     setCompletedSessionsInCycle(0)
     setIsLongBreak(false)
+    setLocalAmbientVolume(0.5)
+    setActiveTaskId(null)
   }
 
   async function exportUserData() {
@@ -606,6 +730,19 @@ function App() {
                     </button>
                   )}
                 </div>
+                {activeTaskId !== null && (() => {
+                  const activeTask = sessionTasks.find(t => t.id === activeTaskId)
+                  if (!activeTask || activeTask.completed) return null
+                  return (
+                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-accent-blue/20 bg-accent-blue/5 px-3 py-1.5 transition-all">
+                      <span className="text-xs text-text-muted">Target:</span>
+                      <span className="truncate text-xs font-medium text-accent-blue">{activeTask.text}</span>
+                      <span className="ml-auto whitespace-nowrap text-[11px] text-text-muted">
+                        🍅 {activeTask.actualPomodoros ?? 0}/{activeTask.estimatedPomodoros ?? 1}
+                      </span>
+                    </div>
+                  )
+                })()}
                 {/* Task Planner */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -614,7 +751,7 @@ function App() {
                       type="text"
                       placeholder="Add a task..."
                       className="flex-1 rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent-blue/50"
-                      onKeyDown={(e) => { if (e.key === 'Enter') { const sel = document.querySelector<HTMLSelectElement>('[data-task-category]'); handleAddTask((e.target as HTMLInputElement).value, sel?.value ? Number(sel.value) : undefined); (e.target as HTMLInputElement).value = '' } }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { const sel = document.querySelector<HTMLSelectElement>('[data-task-category]'); const step = document.querySelector<HTMLSelectElement>('[data-task-pomodoros]'); handleAddTask((e.target as HTMLInputElement).value, sel?.value ? Number(sel.value) : undefined, step?.value ? Number(step.value) : undefined); (e.target as HTMLInputElement).value = '' } }}
                     />
                     <select
                       data-task-category
@@ -625,8 +762,18 @@ function App() {
                         <option key={cat.id} value={cat.id}>{cat.name}</option>
                       ))}
                     </select>
+                    <select
+                      data-task-pomodoros
+                      value={taskPomodoroCount}
+                      onChange={e => setTaskPomodoroCount(Number(e.target.value))}
+                      className="w-14 rounded-lg border border-border-subtle bg-surface px-1 py-1.5 text-xs text-text-primary outline-none focus:border-accent-blue/50"
+                    >
+                      {[1,2,3,4,5,6,7,8].map(n => (
+                        <option key={n} value={n}>🍅{n}</option>
+                      ))}
+                    </select>
                     <button
-                      onClick={() => { const input = document.querySelector<HTMLInputElement>('[data-task-input]'); const sel = document.querySelector<HTMLSelectElement>('[data-task-category]'); if (input) { handleAddTask(input.value, sel?.value ? Number(sel.value) : undefined); input.value = '' } }}
+                      onClick={() => { const input = document.querySelector<HTMLInputElement>('[data-task-input]'); const sel = document.querySelector<HTMLSelectElement>('[data-task-category]'); const step = document.querySelector<HTMLSelectElement>('[data-task-pomodoros]'); if (input) { handleAddTask(input.value, sel?.value ? Number(sel.value) : undefined, step?.value ? Number(step.value) : undefined); input.value = '' } }}
                       className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -639,9 +786,17 @@ function App() {
                       </p>
                     ) : (
                       sessionTasks.map(task => (
-                        <div key={task.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-surface/50">
+                        <div
+                          key={task.id}
+                          onClick={() => { if (!task.completed) setActiveTaskId(activeTaskId === task.id ? null : task.id!) }}
+                          className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors cursor-pointer ${
+                            activeTaskId === task.id
+                              ? 'bg-accent-blue/10 ring-1 ring-accent-blue/30'
+                              : 'hover:bg-surface/50'
+                          }`}
+                        >
                           <div
-                            onClick={() => handleToggleTask(task.id!)}
+                            onClick={e => { e.stopPropagation(); handleToggleTask(task.id!) }}
                             className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border ${
                               task.completed ? 'border-accent-blue bg-accent-blue/20' : 'border-border-subtle bg-surface'
                             }`}
@@ -651,12 +806,57 @@ function App() {
                           {task.categoryId !== undefined && categoriesMap.has(task.categoryId) && (
                             <div className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoriesMap.get(task.categoryId)!.color }} />
                           )}
-                          <span className={`truncate text-xs ${task.completed ? 'text-text-muted line-through' : 'text-text-primary'}`}>
+                          <span className={`flex-1 truncate text-xs ${task.completed ? 'text-text-muted line-through' : 'text-text-primary'}`}>
                             {task.text}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-text-muted">
+                            🍅 {task.actualPomodoros ?? 0}/{task.estimatedPomodoros ?? 1}
                           </span>
                         </div>
                       ))
                     )}
+                  </div>
+                </div>
+                {/* Ambient Soundscape Mixer */}
+                <div className="mt-4 border-t border-border-subtle pt-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex overflow-hidden rounded-md border border-border-subtle">
+                      {[
+                        { id: 'none', icon: X, label: 'Off', activeClass: 'bg-surface text-text-primary', hoverClass: '' },
+                        { id: 'rain', icon: CloudRain, label: 'Rain', activeClass: 'bg-accent-blue/15 text-accent-blue', hoverClass: '' },
+                        { id: 'cafe', icon: Coffee, label: 'Cafe', activeClass: 'bg-accent-amber/15 text-accent-amber', hoverClass: '' },
+                        { id: 'white-noise', icon: Radio, label: 'White', activeClass: 'bg-accent-purple/15 text-accent-purple', hoverClass: '' },
+                      ].map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => updateSetting('ambientTrack', t.id)}
+                          className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-all ${
+                            ambientTrack === t.id
+                              ? t.activeClass
+                              : 'text-text-muted hover:bg-surface hover:text-text-primary'
+                          }`}
+                        >
+                          <t.icon className="h-3 w-3" />
+                          <span>{t.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        value={localAmbientVolume}
+                        onChange={e => {
+                          const v = parseFloat(e.target.value)
+                          setLocalAmbientVolume(v)
+                          updateSetting('ambientVolume', v)
+                        }}
+                        className="w-20 accent-[#3B82F6]"
+                        title={`Volume: ${Math.round(localAmbientVolume * 100)}%`}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

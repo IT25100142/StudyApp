@@ -19,4 +19,6 @@ export const CheckCircle: Icon
 export const Plus: Icon
 export const Settings: Icon
 export const X: Icon
+export const CloudRain: Icon
+export const Radio: Icon
 }

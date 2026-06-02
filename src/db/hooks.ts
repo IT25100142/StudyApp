@@ -5,8 +5,8 @@ import type { HistoryEntry, SettingsKey, CategoryItem } from './types'
 export function useTasks() {
   const tasks = useLiveQuery(() => db.tasks.orderBy('id').reverse().toArray())
 
-  const addTask = async (text: string, categoryId?: number) => {
-    await db.tasks.add({ text, completed: false, createdAt: Date.now(), categoryId })
+  const addTask = async (text: string, categoryId?: number, estimatedPomodoros: number = 1) => {
+    await db.tasks.add({ text, completed: false, createdAt: Date.now(), categoryId, estimatedPomodoros, actualPomodoros: 0 })
   }
 
   const toggleTask = async (id: number) => {
@@ -16,10 +16,18 @@ export function useTasks() {
     }
   }
 
+  const incrementTaskPomodoro = async (id: number) => {
+    const task = await db.tasks.get(id)
+    if (task) {
+      await db.tasks.update(id, { actualPomodoros: (task.actualPomodoros ?? 0) + 1 })
+    }
+  }
+
   return {
     tasks: tasks ?? [],
     addTask,
     toggleTask,
+    incrementTaskPomodoro,
     isLoading: tasks === undefined,
   }
 }
@@ -125,8 +133,10 @@ export function useSettings() {
   const soundEnabled = (rows?.find(r => r.key === 'soundEnabled')?.value as boolean) ?? true
   const targetSessionsPerCycle = (rows?.find(r => r.key === 'targetSessionsPerCycle')?.value as number) ?? 4
   const longBreakDurationMinutes = (rows?.find(r => r.key === 'longBreakDurationMinutes')?.value as number) ?? 15
+  const ambientTrack = (rows?.find(r => r.key === 'ambientTrack')?.value as string) ?? 'none'
+  const ambientVolume = (rows?.find(r => r.key === 'ambientVolume')?.value as number) ?? 0.5
 
-  const updateSetting = async (key: SettingsKey, value: number | boolean) => {
+  const updateSetting = async (key: SettingsKey, value: number | boolean | string) => {
     await db.settings.put({ key, value })
   }
 
@@ -135,6 +145,8 @@ export function useSettings() {
     soundEnabled,
     targetSessionsPerCycle,
     longBreakDurationMinutes,
+    ambientTrack,
+    ambientVolume,
     updateSetting,
     isLoading: rows === undefined,
   }
