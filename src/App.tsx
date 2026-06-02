@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check } from 'lucide-react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const weeklyData = [
@@ -21,6 +21,19 @@ interface DayData {
   sessionsCompleted: string
   focusScore: string
   intensity: 0 | 1 | 2 | 3
+}
+
+function formatMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${h}h ${m}m`
+}
+
+function getIntensity(minutes: number): 0 | 1 | 2 | 3 {
+  if (minutes < 60) return 0
+  if (minutes < 120) return 1
+  if (minutes < 180) return 2
+  return 3
 }
 
 const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -113,7 +126,52 @@ function MicroCard({ icon, label, value, badge, iconBg, badgeBg, badgeText }: Mi
 
 function App() {
   const [selectedDay, setSelectedDay] = useState(31)
-  const day = mayData[selectedDay - 1]
+
+  const [todayStudyMinutes, setTodayStudyMinutes] = useState(525)
+  const [todaySessionsDone, setTodaySessionsDone] = useState(16)
+  const [totalMonthHours, setTotalMonthHours] = useState(246.8)
+  const [totalMonthSessions, setTotalMonthSessions] = useState(484)
+
+  const [secondsElapsed, setSecondsElapsed] = useState(0)
+  const [isTimerActive, setIsTimerActive] = useState(false)
+
+  const progress = Math.min(todayStudyMinutes / 480, 1)
+  const progressPercent = Math.round((todayStudyMinutes / 480) * 100)
+
+  const day = selectedDay === 31
+    ? {
+        ...mayData[30],
+        studyTime: formatMinutes(todayStudyMinutes),
+        sessionsCompleted: `${todaySessionsDone} of 17`,
+        focusScore: `${Math.min(Math.round((todayStudyMinutes / 480) * 100), 100)}%`,
+        intensity: getIntensity(todayStudyMinutes),
+      }
+    : mayData[selectedDay - 1]
+
+  function completeSession() {
+    setIsTimerActive(false)
+    setSecondsElapsed(0)
+    setTodaySessionsDone(s => Math.min(s + 1, 17))
+    setTotalMonthSessions(s => s + 1)
+  }
+
+  useEffect(() => {
+    if (!isTimerActive) return
+    const id = setInterval(() => {
+      setSecondsElapsed(s => {
+        const ns = s + 1
+        if (ns % 60 === 0) {
+          setTodayStudyMinutes(m => m + 1)
+          setTotalMonthHours(h => parseFloat((h + 0.01667).toFixed(4)))
+        }
+        return ns
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [isTimerActive])
+
+  const sessionsRemaining = Math.max(17 - todaySessionsDone, 0)
+
   return (
     <div className="min-h-screen bg-surface p-6 font-sans text-text-primary antialiased">
       <div className="mx-auto grid max-w-[1440px] grid-cols-12 gap-6">
@@ -148,21 +206,21 @@ function App() {
                       strokeWidth="8"
                       strokeLinecap="round"
                       strokeDasharray="314.16"
-                      strokeDashoffset="0"
+                      strokeDashoffset={String(314.16 * (1 - progress))}
                       filter="url(#glow)"
                     />
                   </svg>
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-text-primary">8h 45m</p>
+                    <p className="text-2xl font-bold text-text-primary">{formatMinutes(todayStudyMinutes)}</p>
                     <p className="text-xs text-text-muted">of 8h goal</p>
                   </div>
                 </div>
                 <p className="mt-3 text-xs font-medium text-text-secondary">Study time</p>
                 <div className="mt-3 flex w-full flex-col gap-1.5">
                   {[
-                    { label: 'Focus', value: '8h 45m', valueClass: 'text-text-primary' },
+                    { label: 'Focus', value: formatMinutes(todayStudyMinutes), valueClass: 'text-text-primary' },
                     { label: 'Break', value: '1h 2m', valueClass: 'text-text-primary' },
-                    { label: 'Progress', value: '100%', valueClass: 'text-accent-green' },
+                    { label: 'Progress', value: `${progressPercent}%`, valueClass: 'text-accent-green' },
                   ].map((row) => (
                     <div key={row.label} className="flex items-center justify-between border-b border-border-subtle pb-1 last:border-0">
                       <span className="text-xs text-text-muted">{row.label}</span>
@@ -185,11 +243,11 @@ function App() {
                 <MicroCard
                   icon={<BookOpen className="h-5 w-5 text-accent-green" />}
                   label="Sessions done"
-                  value="16 of 17"
-                  badge={{ text: '1 left' }}
+                  value={`${todaySessionsDone} of 17`}
+                  badge={{ text: todaySessionsDone >= 17 ? 'Completed!' : `${sessionsRemaining} left` }}
                   iconBg="bg-accent-green/10"
-                  badgeBg="bg-accent-green/10"
-                  badgeText="text-accent-green"
+                  badgeBg={todaySessionsDone >= 17 ? 'bg-accent-blue/10' : 'bg-accent-green/10'}
+                  badgeText={todaySessionsDone >= 17 ? 'text-accent-blue' : 'text-accent-green'}
                 />
                 <MicroCard
                   icon={<Zap className="h-5 w-5 text-accent-amber" />}
@@ -200,6 +258,27 @@ function App() {
                   badgeBg="bg-accent-amber/10"
                   badgeText="text-accent-amber"
                 />
+                {/* Timer Controls */}
+                <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface/50 px-3 py-2">
+                  <span className="min-w-[40px] text-xs font-medium text-text-secondary tabular-nums">
+                    {String(Math.floor(secondsElapsed / 60)).padStart(2, '0')}:{String(secondsElapsed % 60).padStart(2, '0')}
+                  </span>
+                  <button
+                    onClick={() => setIsTimerActive(a => !a)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-blue/10 text-accent-blue transition-all hover:bg-accent-blue/20 hover:shadow-md hover:shadow-accent-blue/20"
+                  >
+                    {isTimerActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                  </button>
+                  {(isTimerActive || secondsElapsed > 0) && (
+                    <button
+                      onClick={completeSession}
+                      className="flex items-center gap-1 rounded-md bg-accent-green/10 px-2 py-1 text-xs font-medium text-accent-green transition-all hover:bg-accent-green/20"
+                    >
+                      <Check className="h-3 w-3" />
+                      Complete
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -292,7 +371,7 @@ function App() {
                   </div>
                   <div>
                     <p className="text-xs text-text-muted">Total Hours</p>
-                    <p className="text-xl font-bold">246.8h</p>
+                    <p className="text-xl font-bold">{totalMonthHours.toFixed(1)}h</p>
                   </div>
                 </div>
                 <div className="mt-3 h-0.5 w-full max-w-[200px] rounded-full bg-accent-blue/60" />
@@ -304,7 +383,7 @@ function App() {
                   </div>
                   <div>
                     <p className="text-xs text-text-muted">Sessions</p>
-                    <p className="text-xl font-bold">484</p>
+                    <p className="text-xl font-bold">{totalMonthSessions}</p>
                   </div>
                 </div>
                 <div className="mt-3 flex gap-1">
@@ -323,7 +402,7 @@ function App() {
                   </div>
                   <div>
                     <p className="text-xs text-text-muted">Avg / Day</p>
-                    <p className="text-xl font-bold">8h</p>
+                    <p className="text-xl font-bold">{(totalMonthHours / 31).toFixed(1)}h</p>
                   </div>
                 </div>
                 <div className="mt-3 h-0.5 w-full max-w-[200px] rounded-full bg-accent-green/60" />
@@ -359,6 +438,7 @@ function App() {
             <div className="mb-5 grid grid-cols-7 gap-1.5">
               {gridCells.map((cell, i) => {
                 const dayData = cell ? mayData[cell - 1] : null
+                const intensity = cell === 31 ? getIntensity(todayStudyMinutes) : (dayData?.intensity ?? 0)
                 return cell ? (
                   <button
                     key={i}
@@ -366,7 +446,7 @@ function App() {
                     className={`aspect-square rounded-lg flex items-center justify-center text-xs font-medium transition-all duration-150 ${
                       cell === selectedDay
                         ? 'ring-2 ring-accent-blue shadow-lg shadow-accent-blue/20 bg-accent-blue/20 text-text-primary'
-                        : `${intensityColors[dayData!.intensity]} text-text-secondary hover:ring-1 hover:ring-accent-blue/40`
+                        : `${intensityColors[intensity]} text-text-secondary hover:ring-1 hover:ring-accent-blue/40`
                     }`}
                   >
                     {cell}

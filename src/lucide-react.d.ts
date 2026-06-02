@@ -12,4 +12,7 @@ declare module 'lucide-react' {
   export const TrendingUp: Icon
   export const Award: Icon
   export const Coffee: Icon
+  export const Play: Icon
+  export const Pause: Icon
+  export const Check: Icon
 }
