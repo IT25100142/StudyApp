@@ -1,24 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, Plus, Settings, X } from 'lucide-react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-
-function loadNum(key: string, fallback: number): number {
-  try {
-    const v = localStorage.getItem(key)
-    return v !== null ? JSON.parse(v) : fallback
-  } catch {
-    return fallback
-  }
-}
-
-function loadBool(key: string, fallback: boolean): boolean {
-  try {
-    const v = localStorage.getItem(key)
-    return v !== null ? JSON.parse(v) : fallback
-  } catch {
-    return fallback
-  }
-}
+import { useTasks, useHistory, useSettings, useTodayLog, useMonthLogs } from './db/hooks'
+import { db } from './db/db'
 
 let audioCtx: AudioContext | null = null
 
@@ -41,59 +25,6 @@ function playAlertSound(enabled: boolean) {
     /* audio unavailable */
   }
 }
-
-interface TaskItem {
-  id: number
-  text: string
-  completed: boolean
-}
-
-interface HistoryEntry {
-  id: number
-  timestamp: string
-  type: 'study' | 'break'
-  durationMinutes: number
-}
-
-function loadTasks(key: string, fallback: TaskItem[]): TaskItem[] {
-  try {
-    const v = localStorage.getItem(key)
-    return v !== null ? JSON.parse(v) : fallback
-  } catch {
-    return fallback
-  }
-}
-
-function loadHistory(key: string, fallback: HistoryEntry[]): HistoryEntry[] {
-  try {
-    const v = localStorage.getItem(key)
-    return v !== null ? JSON.parse(v) : fallback
-  } catch {
-    return fallback
-  }
-}
-
-const defaultTasks: TaskItem[] = [
-  { id: 1, text: 'Session 1: Read Documentation', completed: true },
-  { id: 2, text: 'Session 2: Set up environment', completed: true },
-  { id: 3, text: 'Session 3: Data structures review', completed: true },
-  { id: 4, text: 'Session 4: Algorithm practice', completed: true },
-  { id: 5, text: 'Session 5: System design notes', completed: true },
-  { id: 6, text: 'Session 6: Code review session', completed: true },
-  { id: 7, text: 'Session 7: API integration', completed: true },
-  { id: 8, text: 'Session 8: Database modeling', completed: true },
-  { id: 9, text: 'Session 9: Testing & QA', completed: true },
-  { id: 10, text: 'Session 10: Performance tuning', completed: true },
-  { id: 11, text: 'Session 11: Security audit', completed: true },
-  { id: 12, text: 'Session 12: Deployment prep', completed: true },
-  { id: 13, text: 'Session 13: Team sync notes', completed: true },
-  { id: 14, text: 'Session 14: Bug fixes', completed: true },
-  { id: 15, text: 'Session 15: Feature implementation', completed: true },
-  { id: 16, text: 'Session 16: Documentation update', completed: true },
-  { id: 17, text: 'Session 17: Wrap up code execution', completed: false },
-]
-
-const MOCK_SESSIONS_1_30 = 429
 
 interface DayData {
   date: number
@@ -121,74 +52,7 @@ function getIntensity(minutes: number): 0 | 1 | 2 | 3 {
 
 const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-
-function getDayName(date: number): string {
-  return dayNames[(5 + date - 1) % 7]
-}
-
-const mayData: DayData[] = [
-  { date: 1, dayName: getDayName(1), studyTime: '8h 30m', breakTime: '1h 15m', focusRatio: '91%', sessionsCompleted: '16 of 17', focusScore: '93%', intensity: 3 },
-  { date: 2, dayName: getDayName(2), studyTime: '7h 45m', breakTime: '0h 50m', focusRatio: '87%', sessionsCompleted: '14 of 16', focusScore: '89%', intensity: 2 },
-  { date: 3, dayName: getDayName(3), studyTime: '9h 15m', breakTime: '1h 10m', focusRatio: '94%', sessionsCompleted: '17 of 17', focusScore: '96%', intensity: 3 },
-  { date: 4, dayName: getDayName(4), studyTime: '6h 30m', breakTime: '0h 45m', focusRatio: '82%', sessionsCompleted: '12 of 15', focusScore: '84%', intensity: 1 },
-  { date: 5, dayName: getDayName(5), studyTime: '8h 00m', breakTime: '1h 00m', focusRatio: '90%', sessionsCompleted: '15 of 16', focusScore: '91%', intensity: 2 },
-  { date: 6, dayName: getDayName(6), studyTime: '8h 45m', breakTime: '1h 05m', focusRatio: '93%', sessionsCompleted: '16 of 17', focusScore: '94%', intensity: 3 },
-  { date: 7, dayName: getDayName(7), studyTime: '5h 15m', breakTime: '0h 35m', focusRatio: '78%', sessionsCompleted: '10 of 14', focusScore: '80%', intensity: 0 },
-  { date: 8, dayName: getDayName(8), studyTime: '9h 00m', breakTime: '1h 20m', focusRatio: '92%', sessionsCompleted: '17 of 17', focusScore: '95%', intensity: 3 },
-  { date: 9, dayName: getDayName(9), studyTime: '7h 30m', breakTime: '0h 55m', focusRatio: '86%', sessionsCompleted: '14 of 16', focusScore: '88%', intensity: 2 },
-  { date: 10, dayName: getDayName(10), studyTime: '8h 15m', breakTime: '1h 10m', focusRatio: '89%', sessionsCompleted: '15 of 16', focusScore: '92%', intensity: 2 },
-  { date: 11, dayName: getDayName(11), studyTime: '9h 30m', breakTime: '1h 25m', focusRatio: '95%', sessionsCompleted: '17 of 17', focusScore: '97%', intensity: 3 },
-  { date: 12, dayName: getDayName(12), studyTime: '6h 45m', breakTime: '0h 50m', focusRatio: '83%', sessionsCompleted: '12 of 15', focusScore: '85%', intensity: 1 },
-  { date: 13, dayName: getDayName(13), studyTime: '7h 00m', breakTime: '0h 45m', focusRatio: '84%', sessionsCompleted: '13 of 16', focusScore: '86%', intensity: 1 },
-  { date: 14, dayName: getDayName(14), studyTime: '4h 30m', breakTime: '0h 30m', focusRatio: '75%', sessionsCompleted: '9 of 13', focusScore: '77%', intensity: 0 },
-  { date: 15, dayName: getDayName(15), studyTime: '8h 50m', breakTime: '1h 15m', focusRatio: '94%', sessionsCompleted: '16 of 17', focusScore: '95%', intensity: 3 },
-  { date: 16, dayName: getDayName(16), studyTime: '7h 15m', breakTime: '1h 00m', focusRatio: '85%', sessionsCompleted: '13 of 15', focusScore: '88%', intensity: 2 },
-  { date: 17, dayName: getDayName(17), studyTime: '8h 40m', breakTime: '1h 05m', focusRatio: '91%', sessionsCompleted: '15 of 16', focusScore: '93%', intensity: 3 },
-  { date: 18, dayName: getDayName(18), studyTime: '9h 10m', breakTime: '1h 30m', focusRatio: '96%', sessionsCompleted: '17 of 17', focusScore: '97%', intensity: 3 },
-  { date: 19, dayName: getDayName(19), studyTime: '6h 00m', breakTime: '0h 40m', focusRatio: '80%', sessionsCompleted: '11 of 15', focusScore: '82%', intensity: 1 },
-  { date: 20, dayName: getDayName(20), studyTime: '8h 20m', breakTime: '1h 10m', focusRatio: '90%', sessionsCompleted: '15 of 16', focusScore: '92%', intensity: 2 },
-  { date: 21, dayName: getDayName(21), studyTime: '7h 50m', breakTime: '0h 55m', focusRatio: '88%', sessionsCompleted: '14 of 16', focusScore: '90%', intensity: 2 },
-  { date: 22, dayName: getDayName(22), studyTime: '9h 05m', breakTime: '1h 20m', focusRatio: '93%', sessionsCompleted: '16 of 17', focusScore: '96%', intensity: 3 },
-  { date: 23, dayName: getDayName(23), studyTime: '8h 10m', breakTime: '1h 05m', focusRatio: '89%', sessionsCompleted: '15 of 17', focusScore: '91%', intensity: 3 },
-  { date: 24, dayName: getDayName(24), studyTime: '7h 30m', breakTime: '0h 50m', focusRatio: '86%', sessionsCompleted: '13 of 15', focusScore: '88%', intensity: 2 },
-  { date: 25, dayName: getDayName(25), studyTime: '8h 45m', breakTime: '1h 15m', focusRatio: '92%', sessionsCompleted: '16 of 17', focusScore: '94%', intensity: 3 },
-  { date: 26, dayName: getDayName(26), studyTime: '9h 20m', breakTime: '1h 25m', focusRatio: '95%', sessionsCompleted: '17 of 17', focusScore: '97%', intensity: 3 },
-  { date: 27, dayName: getDayName(27), studyTime: '6h 50m', breakTime: '0h 45m', focusRatio: '84%', sessionsCompleted: '12 of 15', focusScore: '86%', intensity: 1 },
-  { date: 28, dayName: getDayName(28), studyTime: '8h 35m', breakTime: '1h 10m', focusRatio: '91%', sessionsCompleted: '15 of 16', focusScore: '93%', intensity: 3 },
-  { date: 29, dayName: getDayName(29), studyTime: '7h 20m', breakTime: '0h 55m', focusRatio: '85%', sessionsCompleted: '13 of 16', focusScore: '87%', intensity: 2 },
-  { date: 30, dayName: getDayName(30), studyTime: '8h 00m', breakTime: '1h 00m', focusRatio: '88%', sessionsCompleted: '14 of 16', focusScore: '90%', intensity: 2 },
-  { date: 31, dayName: getDayName(31), studyTime: '8h 45m', breakTime: '1h 02m', focusRatio: '89%', sessionsCompleted: '16 of 17', focusScore: '94%', intensity: 3 },
-]
-
 const intensityColors = ['bg-intensity-0', 'bg-intensity-1', 'bg-intensity-2', 'bg-intensity-3']
-
-function generateMonthlySeed(month: number, year: number): DayData[] {
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  return Array.from({ length: daysInMonth }, (_, i) => {
-    const date = i + 1
-    const startDay = new Date(year, month, date).getDay()
-    const baseMinutes = 300 + ((date * 7 + month * 13 + year) % 300)
-    const studyH = Math.floor(baseMinutes / 60)
-    const studyM = baseMinutes % 60
-    const breakMinutes = 30 + ((date * 3 + month * 7) % 60)
-    const breakH = Math.floor(breakMinutes / 60)
-    const breakM = breakMinutes % 60
-    const sessionsTotal = 14 + (date % 4)
-    const sessionsDone = Math.min(12 + (date % 5), sessionsTotal)
-    const focus = 70 + ((date * 11 + month * 17) % 25)
-    const intensity: 0 | 1 | 2 | 3 = baseMinutes < 360 ? 0 : baseMinutes < 420 ? 1 : baseMinutes < 480 ? 2 : 3
-    return {
-      date,
-      dayName: dayNames[startDay],
-      studyTime: `${studyH}h ${studyM}m`,
-      breakTime: `${breakH}h ${breakM}m`,
-      focusRatio: `${focus}%`,
-      sessionsCompleted: `${sessionsDone} of ${sessionsTotal}`,
-      focusScore: `${focus}%`,
-      intensity,
-    }
-  })
-}
 
 interface MicroCardItem {
   icon: React.ReactNode
@@ -228,23 +92,27 @@ function MicroCard({ icon, label, value, badge, iconBg, badgeBg, badgeText }: Mi
 }
 
 function App() {
-  const [selectedDay, setSelectedDay] = useState(31)
+  const { tasks: sessionTasks, addTask, toggleTask, isLoading: tasksLoading } = useTasks()
+  const { history: sessionHistory, addEntry: addHistoryEntry, isLoading: historyLoading } = useHistory()
+  const { dailyGoalMinutes, soundEnabled, updateSetting, isLoading: settingsLoading } = useSettings()
+  const { studyMinutes: todayStudyMinutes, breakMinutes: todayBreakMinutes, incrementStudy, incrementBreak, isLoading: todayLogLoading } = useTodayLog()
+  const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth())
+  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear())
+  const { monthLogs, totalMonthHours, isLoading: monthLogsLoading } = useMonthLogs(currentMonth, currentYear)
 
-  const [todayStudyMinutes, setTodayStudyMinutes] = useState(() => loadNum('study_app_minutes', 525))
-  const [totalMonthHours, setTotalMonthHours] = useState(() => loadNum('study_app_month_hours', 246.8))
-  const [todayBreakMinutes, setTodayBreakMinutes] = useState(() => loadNum('study_app_break_minutes', 62))
-  const [timerMode, setTimerMode] = useState<'study' | 'break'>('study')
-  const [sessionTasks, setSessionTasks] = useState<TaskItem[]>(() => loadTasks('study_app_tasks', defaultTasks))
-
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate())
   const [secondsElapsed, setSecondsElapsed] = useState(0)
   const [isTimerActive, setIsTimerActive] = useState(false)
-  const [currentMonth, setCurrentMonth] = useState(4)
-  const [currentYear, setCurrentYear] = useState(2026)
-  const [dailyGoalMinutes, setDailyGoalMinutes] = useState(() => loadNum('study_app_goal_minutes', 480))
-  const [soundEnabled, setSoundEnabled] = useState(() => loadBool('study_app_sound_enabled', true))
+  const [timerMode, setTimerMode] = useState<'study' | 'break'>('study')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [sessionHistory, setSessionHistory] = useState<HistoryEntry[]>(() => loadHistory('study_app_history', []))
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const completingRef = useRef(false)
+  const incStudyRef = useRef(incrementStudy)
+  const incBreakRef = useRef(incrementBreak)
+  incStudyRef.current = incrementStudy
+  incBreakRef.current = incrementBreak
+
+  const isDataReady = !(tasksLoading || historyLoading || settingsLoading || todayLogLoading || monthLogsLoading)
 
   const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay()
   const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
@@ -252,57 +120,111 @@ function App() {
     ...Array(firstDayIndex).fill(null),
     ...Array.from({ length: totalDaysInMonth }, (_, i) => i + 1),
   ]
-  const isLiveMonth = currentMonth === 4 && currentYear === 2026
-  const activeMonthData = isLiveMonth ? mayData : generateMonthlySeed(currentMonth, currentYear)
+  const isLiveMonth = currentMonth === new Date().getMonth() && currentYear === new Date().getFullYear()
 
-  const progress = Math.min(todayStudyMinutes / dailyGoalMinutes, 1)
-  const progressPercent = Math.round((todayStudyMinutes / dailyGoalMinutes) * 100)
-  const totalWeeklyBreakHours = parseFloat(((358 + todayBreakMinutes) / 60).toFixed(1))
+  const monthLogMap = new Map(monthLogs.map(l => [parseInt(l.dateString.split('-')[2]), l]))
+
+  const activeMonthData: DayData[] = Array.from({ length: totalDaysInMonth }, (_, i) => {
+    const date = i + 1
+    const startDay = new Date(currentYear, currentMonth, date).getDay()
+    const log = monthLogMap.get(date)
+    const studyMin = log?.studyMinutes ?? 0
+    const breakMin = log?.breakMinutes ?? 0
+    const total = studyMin + breakMin
+    const focusRatio = total > 0 ? Math.round((studyMin / total) * 100) : 0
+    return {
+      date,
+      dayName: dayNames[startDay],
+      studyTime: formatMinutes(studyMin),
+      breakTime: formatMinutes(breakMin),
+      focusRatio: `${focusRatio}%`,
+      sessionsCompleted: '0',
+      focusScore: `${Math.min(Math.round((studyMin / dailyGoalMinutes) * 100), 100)}%`,
+      intensity: getIntensity(studyMin),
+    }
+  })
+
+  const progress = dailyGoalMinutes > 0 ? Math.min(todayStudyMinutes / dailyGoalMinutes, 1) : 0
+  const progressPercent = Math.round(progress * 100)
+  const totalWeeklyBreakHours = parseFloat((todayBreakMinutes / 60).toFixed(1))
   const todaySessionsDone = sessionTasks.filter(t => t.completed).length
   const totalSessionsTarget = sessionTasks.length
   const sessionsRemaining = Math.max(totalSessionsTarget - todaySessionsDone, 0)
-  const totalMonthSessions = MOCK_SESSIONS_1_30 + todaySessionsDone
+
+  const monthlyHistoryEntries = sessionHistory.filter(e => {
+    const parts = e.timestamp.split(' ')
+    if (parts.length < 3) return false
+    const entryMonth = monthNames.indexOf(parts[0])
+    const entryYear = parseInt(parts[2]) || new Date().getFullYear()
+    return entryMonth === currentMonth && entryYear === currentYear
+  })
+  const totalMonthSessions = monthlyHistoryEntries.length + todaySessionsDone
 
   const isLastDay = selectedDay === totalDaysInMonth
-  const day = isLiveMonth && isLastDay
+  const liveDay = isLiveMonth && isLastDay
     ? {
         ...activeMonthData[selectedDay - 1],
         studyTime: formatMinutes(todayStudyMinutes),
         breakTime: formatMinutes(todayBreakMinutes),
         sessionsCompleted: `${todaySessionsDone} of ${totalSessionsTarget}`,
-        focusScore: `${Math.min(Math.round((todayStudyMinutes / dailyGoalMinutes) * 100), 100)}%`,
+        focusScore: `${progressPercent}%`,
         intensity: getIntensity(todayStudyMinutes),
       }
     : activeMonthData[selectedDay - 1]
 
-  const chartFocus = Math.min(Math.round((todayStudyMinutes / dailyGoalMinutes) * 100), 100)
+  const chartFocus = dailyGoalMinutes > 0 ? Math.min(Math.round((todayStudyMinutes / dailyGoalMinutes) * 100), 100) : 0
 
-  const chartData = [
-    { day: 'Mon', hours: 8.5, focus: 85 },
-    { day: 'Tue', hours: 7.8, focus: 72 },
-    { day: 'Wed', hours: 9.2, focus: 90 },
-    { day: 'Thu', hours: 8.0, focus: 78 },
-    { day: 'Fri', hours: 8.7, focus: 95 },
-    { day: 'Sat', hours: 7.5, focus: 80 },
-    { day: 'Sun', hours: parseFloat((todayStudyMinutes / 60).toFixed(1)), focus: chartFocus },
-  ]
+  const today = new Date()
+  const dayOfWeek = today.getDay()
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const monday = new Date(today)
+  monday.setDate(today.getDate() + mondayOffset)
 
-  function completeSession() {
+  const weekData = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    const y = d.getFullYear()
+    const m = d.getMonth()
+    const dayNum = d.getDate()
+    if (m === currentMonth && y === currentYear) {
+      const log = monthLogMap.get(dayNum)
+      return log ? { studyMin: log.studyMinutes, breakMin: log.breakMinutes } : null
+    }
+    return null
+  })
+
+  const hasChartData = weekData.some(d => d !== null && d.studyMin > 0) || todayStudyMinutes > 0
+  const chartData = hasChartData ? weekData.map((d, i) => ({
+    day: dayNames[(monday.getDay() + i) % 7],
+    hours: d ? parseFloat((d.studyMin / 60).toFixed(1)) : 0,
+    focus: d ? Math.min(Math.round((d.studyMin / dailyGoalMinutes) * 100), 100) : 0,
+  })) : []
+
+  async function completeSession() {
+    if (completingRef.current) return
+    completingRef.current = true
     const elapsed = secondsElapsed
     const mode = timerMode
     setIsTimerActive(false)
     setSecondsElapsed(0)
     const now = new Date()
     const timestamp = `${monthNames[now.getMonth()]} ${now.getDate()}, ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    setSessionHistory(prev => [{ id: Date.now(), timestamp, type: mode, durationMinutes: Math.floor(elapsed / 60) }, ...prev])
+    await addHistoryEntry({
+      timestamp,
+      type: mode,
+      durationMinutes: Math.floor(elapsed / 60),
+    })
     const firstUncompleted = sessionTasks.find(t => !t.completed)
-    if (firstUncompleted) {
-      toggleTask(firstUncompleted.id)
+    if (firstUncompleted && firstUncompleted.id !== undefined) {
+      await toggleTask(firstUncompleted.id)
     } else {
-      const newId = Math.max(...sessionTasks.map(t => t.id), 0) + 1
-      setSessionTasks(prev => [{ id: newId, text: `Session ${newId}`, completed: true }, ...prev])
-      playAlertSound(soundEnabled)
+      await addTask(`Session ${Date.now()}`)
+      const allTasks = await db.tasks.orderBy('id').reverse().toArray()
+      const justAdded = allTasks[0]
+      if (justAdded?.id !== undefined) await toggleTask(justAdded.id)
     }
+    playAlertSound(soundEnabled)
+    completingRef.current = false
   }
 
   function handleModeSwitch(mode: 'study' | 'break') {
@@ -312,20 +234,16 @@ function App() {
     playAlertSound(soundEnabled)
   }
 
-  function addTask(text: string) {
+  function handleAddTask(text: string) {
     const trimmed = text.trim()
     if (!trimmed) return
-    const newId = Math.max(...sessionTasks.map(t => t.id), 0) + 1
-    setSessionTasks(prev => [{ id: newId, text: trimmed, completed: false }, ...prev])
+    addTask(trimmed)
   }
 
-  function toggleTask(id: number) {
-    setSessionTasks(prev => {
-      const task = prev.find(t => t.id === id)
-      if (!task) return prev
-      if (!task.completed) playAlertSound(soundEnabled)
-      return prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
-    })
+  function handleToggleTask(id: number) {
+    const task = sessionTasks.find(t => t.id === id)
+    if (task && !task.completed) playAlertSound(soundEnabled)
+    toggleTask(id)
   }
 
   function goPrevMonth() {
@@ -338,18 +256,50 @@ function App() {
     else { setCurrentMonth(m => m + 1) }
   }
 
-  function exportUserData() {
-    const data = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      todayStudyMinutes,
-      todayBreakMinutes,
-      totalMonthHours,
-      sessionTasks,
-      sessionHistory,
-      dailyGoalMinutes,
-      soundEnabled,
-    }
+  useEffect(() => {
+    if (selectedDay > totalDaysInMonth) setSelectedDay(totalDaysInMonth)
+  }, [currentMonth, currentYear, totalDaysInMonth, selectedDay])
+
+  useEffect(() => {
+    if (!isTimerActive) return
+    const id = setInterval(() => {
+      setSecondsElapsed(s => {
+        const ns = s + 1
+        if (ns % 60 === 0) {
+          if (timerMode === 'study') {
+            incStudyRef.current()
+          } else {
+            incBreakRef.current()
+          }
+        }
+        return ns
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [isTimerActive, timerMode])
+
+  async function resetData() {
+    await db.tasks.clear()
+    await db.history.clear()
+    await db.daily_logs.clear()
+    await db.settings.clear()
+    await db.settings.bulkAdd([
+      { key: 'dailyGoalMinutes', value: 480 },
+      { key: 'soundEnabled', value: true },
+    ])
+    setSecondsElapsed(0)
+    setIsTimerActive(false)
+    setTimerMode('study')
+  }
+
+  async function exportUserData() {
+    const [tasks, history, dailyLogs, settings] = await Promise.all([
+      db.tasks.toArray(),
+      db.history.toArray(),
+      db.daily_logs.toArray(),
+      db.settings.toArray(),
+    ])
+    const data = { version: 1, exportedAt: new Date().toISOString(), tasks, history, dailyLogs, settings }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -359,68 +309,39 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
-  function importUserData(fileString: string) {
+  async function importUserData(fileString: string) {
     try {
       const data = JSON.parse(fileString)
       if (!data || typeof data !== 'object') return
-      if (typeof data.todayStudyMinutes === 'number') setTodayStudyMinutes(data.todayStudyMinutes)
-      if (typeof data.todayBreakMinutes === 'number') setTodayBreakMinutes(data.todayBreakMinutes)
-      if (typeof data.totalMonthHours === 'number') setTotalMonthHours(data.totalMonthHours)
-      if (typeof data.dailyGoalMinutes === 'number') setDailyGoalMinutes(data.dailyGoalMinutes)
-      if (typeof data.soundEnabled === 'boolean') setSoundEnabled(data.soundEnabled)
-      if (Array.isArray(data.sessionTasks)) setSessionTasks(data.sessionTasks)
-      if (Array.isArray(data.sessionHistory)) setSessionHistory(data.sessionHistory)
-      playAlertSound(soundEnabled)
+      if (Array.isArray(data.tasks)) {
+        await db.tasks.clear()
+        await db.tasks.bulkAdd(data.tasks)
+      }
+      if (Array.isArray(data.history)) {
+        await db.history.clear()
+        await db.history.bulkAdd(data.history)
+      }
+      if (Array.isArray(data.dailyLogs)) {
+        await db.daily_logs.clear()
+        await db.daily_logs.bulkAdd(data.dailyLogs)
+      }
+      if (Array.isArray(data.settings)) {
+        await db.settings.clear()
+        await db.settings.bulkAdd(data.settings)
+      }
     } catch { /* malformed */ }
   }
 
-  function resetData() {
-    const keys = ['study_app_minutes', 'study_app_month_hours', 'study_app_break_minutes', 'study_app_tasks', 'study_app_goal_minutes', 'study_app_sound_enabled', 'study_app_history']
-    keys.forEach(k => localStorage.removeItem(k))
-    setTodayStudyMinutes(525)
-    setTodayBreakMinutes(62)
-    setTotalMonthHours(246.8)
-    setDailyGoalMinutes(480)
-    setSoundEnabled(true)
-    setSessionTasks(defaultTasks)
-    setSessionHistory([])
-    setSecondsElapsed(0)
-    setIsTimerActive(false)
-    setTimerMode('study')
+  if (!isDataReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent-blue border-t-transparent" />
+          <p className="text-sm text-text-muted">Loading dashboard...</p>
+        </div>
+      </div>
+    )
   }
-
-  useEffect(() => {
-    if (!isTimerActive) return
-    const id = setInterval(() => {
-      setSecondsElapsed(s => {
-        const ns = s + 1
-        if (ns % 60 === 0) {
-          if (timerMode === 'study') {
-            setTodayStudyMinutes(m => m + 1)
-            setTotalMonthHours(h => parseFloat((h + 0.01667).toFixed(4)))
-          } else {
-            setTodayBreakMinutes(m => m + 1)
-          }
-        }
-        return ns
-      })
-    }, 1000)
-    return () => clearInterval(id)
-  }, [isTimerActive, timerMode])
-
-  useEffect(() => {
-    localStorage.setItem('study_app_minutes', JSON.stringify(todayStudyMinutes))
-    localStorage.setItem('study_app_month_hours', JSON.stringify(totalMonthHours))
-    localStorage.setItem('study_app_break_minutes', JSON.stringify(todayBreakMinutes))
-    localStorage.setItem('study_app_tasks', JSON.stringify(sessionTasks))
-    localStorage.setItem('study_app_goal_minutes', JSON.stringify(dailyGoalMinutes))
-    localStorage.setItem('study_app_sound_enabled', JSON.stringify(soundEnabled))
-    localStorage.setItem('study_app_history', JSON.stringify(sessionHistory))
-  }, [todayStudyMinutes, totalMonthHours, todayBreakMinutes, sessionTasks, dailyGoalMinutes, soundEnabled, sessionHistory])
-
-  useEffect(() => {
-    if (selectedDay > totalDaysInMonth) setSelectedDay(totalDaysInMonth)
-  }, [currentMonth, currentYear, totalDaysInMonth])
 
   return (
     <div className="min-h-screen bg-surface p-6 font-sans text-text-primary antialiased">
@@ -485,7 +406,7 @@ function App() {
                   icon={<Brain className="h-5 w-5 text-accent-purple" />}
                   label="Focus score"
                   value={`${chartFocus}%`}
-                  badge={{ text: '+16% avg' }}
+                  badge={{ text: '+0% avg' }}
                   iconBg="bg-accent-purple/10"
                   badgeBg="bg-accent-purple/10"
                   badgeText="text-accent-purple"
@@ -502,8 +423,8 @@ function App() {
                 <MicroCard
                   icon={<Zap className="h-5 w-5 text-accent-amber" />}
                   label="Streak"
-                  value="14 days"
-                  badge={{ text: 'Active', dot: true }}
+                  value="0 days"
+                  badge={{ text: 'Inactive' }}
                   iconBg="bg-accent-amber/10"
                   badgeBg="bg-accent-amber/10"
                   badgeText="text-accent-amber"
@@ -560,31 +481,37 @@ function App() {
                       type="text"
                       placeholder="Add a task..."
                       className="flex-1 rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent-blue/50"
-                      onKeyDown={(e) => { if (e.key === 'Enter') { addTask((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = '' } }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { handleAddTask((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = '' } }}
                     />
                     <button
-                      onClick={() => { const input = document.querySelector<HTMLInputElement>('[data-task-input]'); if (input) { addTask(input.value); input.value = '' } }}
+                      onClick={() => { const input = document.querySelector<HTMLInputElement>('[data-task-input]'); if (input) { handleAddTask(input.value); input.value = '' } }}
                       className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
                   <div className="max-h-28 space-y-0.5 overflow-y-auto">
-                    {sessionTasks.map(task => (
-                      <div key={task.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-surface/50">
-                        <div
-                          onClick={() => toggleTask(task.id)}
-                          className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border ${
-                            task.completed ? 'border-accent-blue bg-accent-blue/20' : 'border-border-subtle bg-surface'
-                          }`}
-                        >
-                          {task.completed && <Check className="h-3 w-3 text-accent-blue" />}
+                    {sessionTasks.length === 0 ? (
+                      <p className="py-3 text-center text-xs italic text-text-muted">
+                        No focus tasks planned for today. Add an objective above to get started!
+                      </p>
+                    ) : (
+                      sessionTasks.map(task => (
+                        <div key={task.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-surface/50">
+                          <div
+                            onClick={() => handleToggleTask(task.id!)}
+                            className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border ${
+                              task.completed ? 'border-accent-blue bg-accent-blue/20' : 'border-border-subtle bg-surface'
+                            }`}
+                          >
+                            {task.completed && <Check className="h-3 w-3 text-accent-blue" />}
+                          </div>
+                          <span className={`truncate text-xs ${task.completed ? 'text-text-muted line-through' : 'text-text-primary'}`}>
+                            {task.text}
+                          </span>
                         </div>
-                        <span className={`truncate text-xs ${task.completed ? 'text-text-muted line-through' : 'text-text-primary'}`}>
-                          {task.text}
-                        </span>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -600,10 +527,10 @@ function App() {
             {/* Top Metrics Row */}
             <div className="mb-6 grid grid-cols-4 gap-4">
               {[
-                { label: 'Study time', value: '59.3h', icon: <Clock className="h-3.5 w-3.5 text-accent-blue" /> },
+                { label: 'Study time', value: `${totalMonthHours.toFixed(1)}h`, icon: <Clock className="h-3.5 w-3.5 text-accent-blue" /> },
                 { label: 'Break time', value: `${totalWeeklyBreakHours}h`, icon: <Coffee className="h-3.5 w-3.5 text-accent-amber" /> },
-                { label: 'Active days', value: '7/7', icon: <Calendar className="h-3.5 w-3.5 text-accent-green" /> },
-                { label: 'Best day', value: 'Thu', icon: <Award className="h-3.5 w-3.5 text-accent-purple" /> },
+                { label: 'Active days', value: `${new Set(monthLogs.filter(l => l.studyMinutes > 0).map(l => l.dateString)).size}/${totalDaysInMonth}`, icon: <Calendar className="h-3.5 w-3.5 text-accent-green" /> },
+                { label: 'Best day', value: '--', icon: <Award className="h-3.5 w-3.5 text-accent-purple" /> },
               ].map((m) => (
                 <div key={m.label} className="flex items-center gap-2.5 rounded-lg border border-border-subtle bg-surface/50 px-3 py-2.5">
                   <div className="flex h-7 w-7 items-center justify-center rounded-md bg-surface">
@@ -620,47 +547,59 @@ function App() {
             <div className="grid grid-cols-2 gap-4">
               <div className="rounded-xl border border-border-subtle bg-surface/30 p-4">
                 <p className="mb-3 text-xs font-medium text-text-secondary">Study hours trend</p>
-                <ResponsiveContainer width="100%" height={180}>
-                  <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={true} vertical={false} />
-                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} domain={[0, 12]} />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      labelStyle={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}
-                      itemStyle={{ color: '#F8FAFC', fontSize: 13 }}
-                    />
-                    <Area type="monotone" dataKey="hours" stroke="#3B82F6" strokeWidth={2} fill="url(#areaGradient)" dot={false} activeDot={{ r: 4, fill: '#3B82F6' }} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {hasChartData ? (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={true} vertical={false} />
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} domain={[0, 12]} />
+                      <Tooltip
+                        contentStyle={tooltipStyle}
+                        labelStyle={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}
+                        itemStyle={{ color: '#F8FAFC', fontSize: 13 }}
+                      />
+                      <Area type="monotone" dataKey="hours" stroke="#3B82F6" strokeWidth={2} fill="url(#areaGradient)" dot={false} activeDot={{ r: 4, fill: '#3B82F6' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-[180px] items-center justify-center">
+                    <p className="text-xs text-text-muted">No study data available for this week yet.</p>
+                  </div>
+                )}
               </div>
               <div className="rounded-xl border border-border-subtle bg-surface/30 p-4">
                 <p className="mb-3 text-xs font-medium text-text-secondary">Daily focus bars</p>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3B82F6" />
-                        <stop offset="100%" stopColor="#8B5CF6" />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={true} vertical={false} />
-                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} tickFormatter={(v: string) => v.charAt(0)} />
-                    <YAxis hide />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      labelStyle={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}
-                      formatter={(value) => [`${value}%`, 'Focus']}
-                    />
-                    <Bar dataKey="focus" fill="url(#barGradient)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {hasChartData ? (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3B82F6" />
+                          <stop offset="100%" stopColor="#8B5CF6" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={true} vertical={false} />
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} tickFormatter={(v: string) => v.charAt(0)} />
+                      <YAxis hide />
+                      <Tooltip
+                        contentStyle={tooltipStyle}
+                        labelStyle={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}
+                        formatter={(value) => [`${value}%`, 'Focus']}
+                      />
+                      <Bar dataKey="focus" fill="url(#barGradient)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-[180px] items-center justify-center">
+                    <p className="text-xs text-text-muted">No study data available for this week yet.</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -712,7 +651,7 @@ function App() {
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div
                       key={i}
-                      className={`h-1 w-1.5 rounded-sm ${i < 7 ? 'bg-accent-purple/70' : 'bg-accent-purple/20'}`}
+                      className={`h-1 w-1.5 rounded-sm ${i < Math.min(totalMonthSessions, 10) && totalMonthSessions > 0 ? 'bg-accent-purple/70' : 'bg-accent-purple/20'}`}
                     />
                   ))}
                 </div>
@@ -724,7 +663,7 @@ function App() {
                   </div>
                   <div>
                     <p className="text-xs text-text-muted">Avg / Day</p>
-                    <p className="text-xl font-bold">{(totalMonthHours / 31).toFixed(1)}h</p>
+                    <p className="text-xl font-bold">{(totalDaysInMonth > 0 ? (totalMonthHours / totalDaysInMonth).toFixed(1) : '0.0')}h</p>
                   </div>
                 </div>
                 <div className="mt-3 h-0.5 w-full max-w-[200px] rounded-full bg-accent-green/60" />
@@ -807,7 +746,7 @@ function App() {
               <div className="mb-4 flex items-start justify-between">
                 <div>
                   <p className="text-[11px] font-medium tracking-wider text-accent-blue">SELECTED DAY</p>
-                  <p className="text-sm font-semibold text-text-primary">{day.dayName}, {day.date} {monthNames[currentMonth]}</p>
+                  <p className="text-sm font-semibold text-text-primary">{liveDay.dayName}, {selectedDay} {monthNames[currentMonth]}</p>
                 </div>
                 {isLiveMonth && selectedDay === totalDaysInMonth && (
                   <div className="flex items-center gap-1.5 rounded-full bg-accent-green/10 px-3 py-1">
@@ -819,19 +758,19 @@ function App() {
               <div className="mb-3 grid grid-cols-3 gap-4">
                 <div>
                   <p className="mb-0.5 text-xs text-text-muted">Study</p>
-                  <p className="text-lg font-bold text-accent-blue">{day.studyTime}</p>
+                  <p className="text-lg font-bold text-accent-blue">{liveDay.studyTime}</p>
                 </div>
                 <div>
                   <p className="mb-0.5 text-xs text-text-muted">Breaks</p>
-                  <p className="text-lg font-bold text-accent-amber">{day.breakTime}</p>
+                  <p className="text-lg font-bold text-accent-amber">{liveDay.breakTime}</p>
                 </div>
                 <div>
                   <p className="mb-0.5 text-xs text-text-muted">Focus ratio</p>
-                  <p className="text-lg font-bold text-accent-green">{day.focusRatio}</p>
+                  <p className="text-lg font-bold text-accent-green">{liveDay.focusRatio}</p>
                 </div>
               </div>
               <p className="border-t border-border-card pt-3 text-xs text-text-muted">
-                {day.sessionsCompleted} sessions completed · score {day.focusScore}
+                {liveDay.sessionsCompleted} sessions completed · score {liveDay.focusScore}
               </p>
             </div>
           </div>
@@ -851,7 +790,7 @@ function App() {
             <div className="mb-6">
               <p className="mb-1 text-sm font-medium text-text-primary">Daily Goal</p>
               <p className="mb-3 text-xs text-text-muted">{Math.round(dailyGoalMinutes / 60)} hours</p>
-              <input type="range" min="120" max="720" step="60" value={dailyGoalMinutes} onChange={e => setDailyGoalMinutes(Number(e.target.value))} className="w-full accent-[#3B82F6]" />
+              <input type="range" min="120" max="720" step="60" value={dailyGoalMinutes} onChange={e => updateSetting('dailyGoalMinutes', Number(e.target.value))} className="w-full accent-[#3B82F6]" />
               <div className="mt-1 flex justify-between text-[11px] text-text-muted">
                 <span>2h</span><span>12h</span>
               </div>
@@ -861,7 +800,7 @@ function App() {
                 <p className="text-sm font-medium text-text-primary">Sound Effects</p>
                 <p className="text-xs text-text-muted">Play chime on session events</p>
               </div>
-              <button onClick={() => setSoundEnabled(s => !s)} className={`relative h-6 w-11 rounded-full transition-colors ${soundEnabled ? 'bg-accent-blue' : 'bg-border-subtle'}`}>
+              <button onClick={() => updateSetting('soundEnabled', !soundEnabled)} className={`relative h-6 w-11 rounded-full transition-colors ${soundEnabled ? 'bg-accent-blue' : 'bg-border-subtle'}`}>
                 <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${soundEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
             </div>
