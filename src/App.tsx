@@ -300,7 +300,6 @@ function App() {
   }, [timerMode, isLongBreak, longBreakDurationMinutes, shortBreakDurationMinutes])
 
   const remainingSeconds = Math.max(0, targetSeconds - secondsElapsed)
-  const sessionProgress = targetSeconds > 0 ? Math.min(1, secondsElapsed / targetSeconds) : 0
   const [isHotkeyHudOpen, setIsHotkeyHudOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#3B82F6')
@@ -3095,33 +3094,18 @@ function App() {
 
           {/* Centerpiece Layout */}
           <div className="relative z-10 flex flex-col items-center text-center space-y-8 select-none max-w-md px-6 animate-slide-in-up">
-            {/* SVG glowing circle dial */}
-            <div className="relative flex items-center justify-center">
-              <svg className="h-64 w-64 -rotate-90 filter drop-shadow-[0_0_15px_rgba(var(--surface-card-rgb),0.15)]" viewBox="0 0 120 120">
-                <circle cx="60" cy="60" r="50" fill="none" stroke="#0B0F19" strokeWidth="4" />
-                <circle
-                  cx="60" cy="60" r="50"
-                  fill="none"
-                  stroke="var(--color-accent-blue)"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeDasharray="314.16"
-                  strokeDashoffset={String(314.16 * (1 - sessionProgress))}
-                  style={{ transition: 'stroke-dashoffset 1s linear' }}
-                />
-              </svg>
-              <div className="absolute text-center">
-                <p className="text-6xl font-bold tracking-tight text-slate-100 tabular-nums">
-                  {String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:{String(remainingSeconds % 60).padStart(2, '0')}
-                </p>
-                <p className="text-xs text-slate-400 mt-1.5 uppercase tracking-wider font-semibold">
-                  {timerMode === 'study' ? 'Deep Study' : 'Resting'}
-                </p>
-              </div>
+            {/* Cinematic countdown clock */}
+            <div className="text-center">
+              <p className="text-[11rem] md:text-[14rem] font-extralight tracking-tighter text-white/95 font-mono leading-none select-none drop-shadow-[0_4px_24px_rgba(255,255,255,0.03)]">
+                {String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:{String(remainingSeconds % 60).padStart(2, '0')}
+              </p>
+              <p className="text-xs text-slate-400 mt-3 uppercase tracking-wider font-semibold">
+                {timerMode === 'study' ? 'Deep Study' : 'Resting'}
+              </p>
             </div>
 
             {/* Focus Anchor Text */}
-            <div className="space-y-1">
+            <div className="mt-10 space-y-1">
               {(() => {
                 const activeTask = sessionTasks.find(t => t.id === activeTaskId)
                 return (
