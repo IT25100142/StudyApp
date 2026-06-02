@@ -236,6 +236,8 @@ function App() {
     shortBreakDurationMinutes,
     ambient_alphaWaves,
     tactile_feedback,
+    developer_font,
+    enforce_lockout,
     isLoading: settingsLoading
   } = useSettings()
   const { studyMinutes: todayStudyMinutes, breakMinutes: todayBreakMinutes, incrementStudy, incrementBreak, isLoading: todayLogLoading } = useTodayLog()
@@ -287,6 +289,18 @@ function App() {
   const [timerMode, setTimerMode] = useState<'study' | 'break'>('study')
   const [completedSessionsInCycle, setCompletedSessionsInCycle] = useState(0)
   const [isLongBreak, setIsLongBreak] = useState(false)
+
+  const targetSeconds = useMemo(() => {
+    if (timerMode === 'study') {
+      return 25 * 60 // 25 minutes for study
+    } else {
+      const dur = isLongBreak ? longBreakDurationMinutes : shortBreakDurationMinutes
+      return dur * 60
+    }
+  }, [timerMode, isLongBreak, longBreakDurationMinutes, shortBreakDurationMinutes])
+
+  const remainingSeconds = Math.max(0, targetSeconds - secondsElapsed)
+  const sessionProgress = targetSeconds > 0 ? Math.min(1, secondsElapsed / targetSeconds) : 0
   const [isHotkeyHudOpen, setIsHotkeyHudOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#3B82F6')
@@ -307,7 +321,20 @@ function App() {
   const [taskCycleCount, setTaskCycleCount] = useState(1)
   const [localTactileFeedback, setLocalTactileFeedback] = useState(false)
   const [activeToast, setActiveToast] = useState<{ key: string; message: string; id: number } | null>(null)
+  const [localDeveloperFont, setLocalDeveloperFont] = useState('JetBrains Mono')
+  const [localEnforceLockout, setLocalEnforceLockout] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const volRainRef = useRef(localVolumeRain)
+  const volCafeRef = useRef(localVolumeCafe)
+  const volWhiteNoiseRef = useRef(localVolumeWhiteNoise)
+  const alphaWavesRef = useRef(localAlphaWaves)
+
+  volRainRef.current = localVolumeRain
+  volCafeRef.current = localVolumeCafe
+  volWhiteNoiseRef.current = localVolumeWhiteNoise
+  alphaWavesRef.current = localAlphaWaves
+
   const completingRef = useRef(false)
   const incStudyRef = useRef(incrementStudy)
   const incBreakRef = useRef(incrementBreak)
@@ -397,23 +424,29 @@ function App() {
   const totalSessionsTarget = sessionTasks.length
   const sessionsRemaining = Math.max(totalSessionsTarget - todaySessionsDone, 0)
 
-  const monthlyHistoryEntries = sessionHistory.filter(e => {
-    const parts = e.timestamp.split(' ')
-    if (parts.length < 3) return false
-    const entryMonth = monthNames.indexOf(parts[0])
-    const entryYear = parseInt(parts[2]) || new Date().getFullYear()
-    return entryMonth === currentMonth && entryYear === currentYear
-  })
+  const monthlyHistoryEntries = useMemo(() => {
+    return sessionHistory
+      .filter(e => {
+        const parts = e.timestamp.split(' ')
+        if (parts.length < 3) return false
+        const entryMonth = monthNames.indexOf(parts[0])
+        const entryYear = parseInt(parts[2]) || new Date().getFullYear()
+        return entryMonth === currentMonth && entryYear === currentYear
+      })
+      .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
+  }, [sessionHistory, currentMonth, currentYear])
   const totalMonthSessions = monthlyHistoryEntries.length + todaySessionsDone
 
   const selectedDayHistory = useMemo(() => {
-    return sessionHistory.filter(e => {
-      const parts = e.timestamp.split(' ')
-      if (parts.length < 2) return false
-      const entryMonth = monthNames.indexOf(parts[0])
-      const entryDay = parseInt(parts[1])
-      return entryMonth === currentMonth && entryDay === selectedDay
-    })
+    return sessionHistory
+      .filter(e => {
+        const parts = e.timestamp.split(' ')
+        if (parts.length < 2) return false
+        const entryMonth = monthNames.indexOf(parts[0])
+        const entryDay = parseInt(parts[1])
+        return entryMonth === currentMonth && entryDay === selectedDay
+      })
+      .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
   }, [sessionHistory, currentMonth, selectedDay])
 
 
@@ -589,6 +622,144 @@ function App() {
     return () => clearInterval(id)
   }, [isTimerActive, timerMode])
 
+  // Auto-complete focus/break cycle when seconds elapsed reaches target seconds
+  useEffect(() => {
+    if (isTimerActive && secondsElapsed >= targetSeconds) {
+      completeSessionRef.current()
+    }
+  }, [secondsElapsed, targetSeconds, isTimerActive])
+
+  // Zen V3 Particle Engine: Runs inside requestAnimationFrame, scales speed and connection alpha with aggregate ambient volumes
+  useEffect(() => {
+    if (!isZenMode) return
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    let animationFrameId: number
+    let width = canvas.width = window.innerWidth
+    let height = canvas.height = window.innerHeight
+
+    const handleResize = () => {
+      if (!canvas) return
+      width = canvas.width = window.innerWidth
+      height = canvas.height = window.innerHeight
+    }
+    window.addEventListener('resize', handleResize)
+
+    // Setup 60 particles
+    const particleCount = 60
+    interface Particle {
+      x: number
+      y: number
+      vx: number
+      vy: number
+      radius: number
+      originalVx: number
+      originalVy: number
+    }
+    const particles: Particle[] = []
+
+    for (let i = 0; i < particleCount; i++) {
+      const x = Math.random() * width
+      const y = Math.random() * height
+      const angle = Math.random() * Math.PI * 2
+      const speed = Math.random() * 0.4 + 0.15
+      const vx = Math.cos(angle) * speed
+      const vy = Math.sin(angle) * speed
+      particles.push({
+        x,
+        y,
+        vx,
+        vy,
+        radius: Math.random() * 1.8 + 0.8,
+        originalVx: vx,
+        originalVy: vy
+      })
+    }
+
+    const animate = () => {
+      ctx.clearRect(0, 0, width, height)
+
+      // Query volume refs dynamically
+      const volRain = volRainRef.current
+      const volCafe = volCafeRef.current
+      const volWhiteNoise = volWhiteNoiseRef.current
+      const alphaWaves = alphaWavesRef.current ? 0.35 : 0
+      const aggregateVol = volRain + volCafe + volWhiteNoise + alphaWaves
+
+      const isMuted = aggregateVol <= 0.01
+
+      // Speeds scale directly with sound volume levels
+      const speedFactor = isMuted ? 0 : Math.min(2.5, aggregateVol * 1.3)
+      const maxDistance = isMuted ? 40 : 100 + Math.min(50, aggregateVol * 30)
+      const maxLineAlpha = isMuted ? 0 : Math.min(0.20, aggregateVol * 0.12)
+
+      particles.forEach(p => {
+        if (isMuted) {
+          // Collapse to static central cluster when muted
+          const targetX = width / 2
+          const targetY = height / 2
+          p.x += (targetX - p.x) * 0.015
+          p.y += (targetY - p.y) * 0.015
+        } else {
+          p.x += p.originalVx * speedFactor
+          p.y += p.originalVy * speedFactor
+
+          // Wrap around or bounce within edges
+          if (p.x < 0) { p.x = 0; p.originalVx *= -1 }
+          else if (p.x > width) { p.x = width; p.originalVx *= -1 }
+
+          if (p.y < 0) { p.y = 0; p.originalVy *= -1 }
+          else if (p.y > height) { p.y = height; p.originalVy *= -1 }
+        }
+
+        // Draw node
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2)
+        ctx.fillStyle = isMuted
+          ? 'rgba(71, 85, 105, 0.3)'
+          : `rgba(99, 102, 241, ${0.35 + Math.min(0.35, aggregateVol * 0.15)})`
+        ctx.fill()
+      })
+
+      // Draw connection lines if not muted
+      if (!isMuted) {
+        for (let i = 0; i < particleCount; i++) {
+          for (let j = i + 1; j < particleCount; j++) {
+            const p1 = particles[i]
+            const p2 = particles[j]
+            const dx = p1.x - p2.x
+            const dy = p1.y - p2.y
+            const dist = Math.sqrt(dx * dx + dy * dy)
+
+            if (dist < maxDistance) {
+              const alpha = (1 - dist / maxDistance) * maxLineAlpha
+              ctx.beginPath()
+              ctx.moveTo(p1.x, p1.y)
+              ctx.lineTo(p2.x, p2.y)
+              ctx.strokeStyle = `rgba(99, 102, 241, ${alpha})`
+              ctx.lineWidth = 0.75
+              ctx.stroke()
+            }
+          }
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(animate)
+    }
+
+    animate()
+
+    return () => {
+      cancelAnimationFrame(animationFrameId)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [isZenMode])
+
   // active recall helper
   async function submitRecallGrade(task: TaskItem, q: number) {
     if (task.id === undefined) return
@@ -761,6 +932,82 @@ function App() {
   useEffect(() => {
     if (tactile_feedback !== undefined) setLocalTactileFeedback(tactile_feedback)
   }, [tactile_feedback])
+
+  useEffect(() => {
+    if (developer_font !== undefined) setLocalDeveloperFont(developer_font)
+  }, [developer_font])
+
+  useEffect(() => {
+    if (enforce_lockout !== undefined) setLocalEnforceLockout(enforce_lockout)
+  }, [enforce_lockout])
+
+  // Tab Destruction Protection: sessionStorage backing shadow state
+  useEffect(() => {
+    if (!isDataReady) return
+    const shadow = {
+      mode: timerMode,
+      secondsElapsed,
+      isTimerActive,
+      categoryId: timerCategoryId,
+      timestamp: Date.now()
+    }
+    sessionStorage.setItem('active_session_shadow', JSON.stringify(shadow))
+  }, [timerMode, secondsElapsed, isTimerActive, timerCategoryId, isDataReady])
+
+  // Boot restore logic for interrupted active session
+  useEffect(() => {
+    if (!isDataReady) return
+    const shadowStr = sessionStorage.getItem('active_session_shadow')
+    if (shadowStr) {
+      try {
+        const shadow = JSON.parse(shadowStr)
+        if (shadow && shadow.isTimerActive && shadow.secondsElapsed >= 60) {
+          const runRestore = async () => {
+            const elapsedMin = Math.floor(shadow.secondsElapsed / 60)
+            const now = new Date()
+            const timestamp = `${monthNames[now.getMonth()]} ${now.getDate()}, ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+            
+            // 1. Add entry to Dexie history
+            await addHistoryEntry({
+              timestamp,
+              type: shadow.mode,
+              durationMinutes: elapsedMin,
+              categoryId: shadow.mode === 'study' ? shadow.categoryId : undefined,
+            })
+            
+            // 2. Increment daily log minutes
+            const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+            const existing = await db.daily_logs.get(current)
+            if (shadow.mode === 'study') {
+              if (existing) {
+                await db.daily_logs.update(current, { studyMinutes: existing.studyMinutes + elapsedMin })
+              } else {
+                await db.daily_logs.add({ dateString: current, studyMinutes: elapsedMin, breakMinutes: 0 })
+              }
+            } else {
+              if (existing) {
+                await db.daily_logs.update(current, { breakMinutes: existing.breakMinutes + elapsedMin })
+              } else {
+                await db.daily_logs.add({ dateString: current, studyMinutes: 0, breakMinutes: elapsedMin })
+              }
+            }
+            
+            // 3. Trigger HUD toast notification
+            setActiveToast({
+              key: 'RESTORE',
+              message: `RECOVERED ${elapsedMin}M INTERRUPTED ${shadow.mode.toUpperCase()}`,
+              id: Date.now()
+            })
+          }
+          runRestore()
+        }
+      } catch (err) {
+        console.error('Failed to restore shadow session:', err)
+      } finally {
+        sessionStorage.removeItem('active_session_shadow')
+      }
+    }
+  }, [isDataReady])
 
 
 
@@ -1222,6 +1469,7 @@ function App() {
     '--surface-card-rgb': activeThemeVars.surfaceCardRgb,
     '--card-opacity': cardOpacity,
     '--backdrop-blur': `${backdropBlur}px`,
+    '--font-family-override': localDeveloperFont === 'Inter' ? "'Inter', system-ui, sans-serif" : `'${localDeveloperFont}', monospace`,
   } as React.CSSProperties
 
   return (
@@ -1402,7 +1650,7 @@ function App() {
                     <span className={`min-w-[45px] text-sm font-semibold tabular-nums ${
                       isLongBreak && timerMode === 'break' ? 'text-accent-green' : 'text-accent-blue'
                     }`}>
-                      {String(Math.floor(secondsElapsed / 60)).padStart(2, '0')}:{String(secondsElapsed % 60).padStart(2, '0')}
+                      {String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:{String(remainingSeconds % 60).padStart(2, '0')}
                     </span>
                     {/* Cycle progress pips */}
                     {!isZenMode && (
@@ -2232,6 +2480,31 @@ function App() {
                         </div>
                       </div>
                     </div>
+                    <div className="rounded-xl border border-slate-800/60 dynamic-card shadow-xl p-5">
+                      <h3 className="text-xs font-bold text-slate-200 tracking-wider uppercase mb-4">Typography Calibration</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-2">Developer Font Family</label>
+                          <select
+                            value={localDeveloperFont}
+                            onChange={e => {
+                              const val = e.target.value
+                              setLocalDeveloperFont(val)
+                              updateSetting('developer_font', val)
+                            }}
+                            className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-text-primary outline-none focus:border-accent-blue/50 cursor-pointer transition-all"
+                          >
+                            <option value="JetBrains Mono">JetBrains Mono (Console default)</option>
+                            <option value="Fira Code">Fira Code (Ligature ready)</option>
+                            <option value="SF Mono">SF Mono (System premium)</option>
+                            <option value="Inter">Inter (Sans-serif modern)</option>
+                          </select>
+                          <p className="mt-1.5 text-[10px] text-slate-500 font-semibold">
+                            Applies immediately to all user interface panels and timer text overlays.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="xl:col-span-1">
@@ -2403,6 +2676,24 @@ function App() {
                           className={`relative h-6 w-11 shrink-0 rounded-full transition-all cursor-pointer ${soundEnabled ? 'bg-accent-blue' : 'bg-slate-800'}`}
                         >
                           <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${soundEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-800/60 dynamic-card shadow-xl p-5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-xs font-bold text-slate-200 tracking-wider uppercase mb-1">Enforce Session Boundary</h3>
+                          <p className="text-xs text-slate-400">Hides the exit navigation controls inside Zen Mode while the study session is active</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const nextVal = !localEnforceLockout
+                            setLocalEnforceLockout(nextVal)
+                            updateSetting('enforce_lockout', nextVal)
+                          }}
+                          className={`relative h-6 w-11 shrink-0 rounded-full transition-all cursor-pointer ${localEnforceLockout ? 'bg-accent-purple animate-pulse-soft' : 'bg-slate-800'}`}
+                        >
+                          <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${localEnforceLockout ? 'translate-x-5' : 'translate-x-0'}`} />
                         </button>
                       </div>
                     </div>
@@ -2767,7 +3058,10 @@ function App() {
                         {sessionHistory.length === 0 ? (
                           <p className="text-xs italic text-slate-500 text-center py-6">No study sessions recorded today.</p>
                         ) : (
-                          sessionHistory.slice(0, 10).map(entry => (
+                          [...sessionHistory]
+                            .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
+                            .slice(0, 10)
+                            .map(entry => (
                             <div key={entry.id} className="flex flex-col gap-1 rounded-lg bg-slate-950/30 border border-slate-850 p-2.5">
                               <div className="flex items-center gap-2">
                                 <span className={`h-2 w-2 rounded-full ${entry.type === 'study' ? 'bg-accent-blue' : 'bg-accent-amber'}`} />
@@ -2796,6 +3090,9 @@ function App() {
             <div className="w-[550px] h-[550px] rounded-full bg-gradient-to-tr from-accent-blue/10 via-accent-purple/10 to-accent-blue/10 blur-3xl opacity-20 animate-zen-breath" />
           </div>
 
+          {/* HTML5 Canvas Ambient Particle Background */}
+          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-0" />
+
           {/* Centerpiece Layout */}
           <div className="relative z-10 flex flex-col items-center text-center space-y-8 select-none max-w-md px-6 animate-slide-in-up">
             {/* SVG glowing circle dial */}
@@ -2809,13 +3106,13 @@ function App() {
                   strokeWidth="4"
                   strokeLinecap="round"
                   strokeDasharray="314.16"
-                  strokeDashoffset={String(314.16 * (1 - progress))}
+                  strokeDashoffset={String(314.16 * (1 - sessionProgress))}
                   style={{ transition: 'stroke-dashoffset 1s linear' }}
                 />
               </svg>
               <div className="absolute text-center">
                 <p className="text-6xl font-bold tracking-tight text-slate-100 tabular-nums">
-                  {String(Math.floor(secondsElapsed / 60)).padStart(2, '0')}:{String(secondsElapsed % 60).padStart(2, '0')}
+                  {String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:{String(remainingSeconds % 60).padStart(2, '0')}
                 </p>
                 <p className="text-xs text-slate-400 mt-1.5 uppercase tracking-wider font-semibold">
                   {timerMode === 'study' ? 'Deep Study' : 'Resting'}
@@ -2855,13 +3152,15 @@ function App() {
           </div>
 
           {/* Minimal exit chevron */}
-          <button
-            onClick={() => setIsZenMode(false)}
-            className="absolute top-8 left-8 flex h-10 w-10 items-center justify-center rounded-full bg-slate-950/40 border border-slate-800 hover:bg-slate-900 hover:text-text-primary text-slate-400 transition-colors cursor-pointer"
-            title="Exit Sanctuary"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
+          {!(localEnforceLockout && isTimerActive && timerMode === 'study') && (
+            <button
+              onClick={() => setIsZenMode(false)}
+              className="absolute top-8 left-8 flex h-10 w-10 items-center justify-center rounded-full bg-slate-950/40 border border-slate-800 hover:bg-slate-900 hover:text-text-primary text-slate-400 transition-colors cursor-pointer"
+              title="Exit Sanctuary"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
         </div>
       )}
       {isHotkeyHudOpen && (

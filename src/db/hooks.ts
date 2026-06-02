@@ -172,6 +172,8 @@ export function useSettings() {
   const shortBreakDurationMinutes = (rows?.find(r => r.key === 'shortBreakDurationMinutes')?.value as number) ?? 5
   const ambient_alphaWaves = (rows?.find(r => r.key === 'ambient_alphaWaves')?.value as boolean) ?? false
   const tactile_feedback = (rows?.find(r => r.key === 'tactile_feedback')?.value as boolean) ?? false
+  const developer_font = (rows?.find(r => r.key === 'developer_font')?.value as string) ?? 'JetBrains Mono'
+  const enforce_lockout = (rows?.find(r => r.key === 'enforce_lockout')?.value as boolean) ?? false
 
   const updateSetting = async (key: SettingsKey, value: any) => {
     await db.settings.put({ key, value })
@@ -194,6 +196,8 @@ export function useSettings() {
     shortBreakDurationMinutes,
     ambient_alphaWaves,
     tactile_feedback,
+    developer_font,
+    enforce_lockout,
     updateSetting,
     isLoading: rows === undefined,
   }
