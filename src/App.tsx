@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, Plus, Settings, X } from 'lucide-react'
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { useTasks, useHistory, useSettings, useTodayLog, useMonthLogs } from './db/hooks'
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { useTasks, useHistory, useSettings, useTodayLog, useMonthLogs, useCategories, useCategoryBreakdown } from './db/hooks'
 import { db } from './db/db'
 
 let audioCtx: AudioContext | null = null
@@ -99,6 +99,9 @@ function App() {
   const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth())
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear())
   const { monthLogs, totalMonthHours, isLoading: monthLogsLoading } = useMonthLogs(currentMonth, currentYear)
+  const { categories, isLoading: categoriesLoading } = useCategories()
+  const { breakdown: categoryBreakdown, isLoading: breakdownLoading } = useCategoryBreakdown()
+  const [timerCategoryId, setTimerCategoryId] = useState<number | undefined>(undefined)
 
   const [selectedDay, setSelectedDay] = useState(() => new Date().getDate())
   const [secondsElapsed, setSecondsElapsed] = useState(0)
@@ -112,7 +115,7 @@ function App() {
   incStudyRef.current = incrementStudy
   incBreakRef.current = incrementBreak
 
-  const isDataReady = !(tasksLoading || historyLoading || settingsLoading || todayLogLoading || monthLogsLoading)
+  const isDataReady = !(tasksLoading || historyLoading || settingsLoading || todayLogLoading || monthLogsLoading || categoriesLoading || breakdownLoading)
 
   const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay()
   const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
@@ -123,6 +126,11 @@ function App() {
   const isLiveMonth = currentMonth === new Date().getMonth() && currentYear === new Date().getFullYear()
 
   const monthLogMap = new Map(monthLogs.map(l => [parseInt(l.dateString.split('-')[2]), l]))
+
+  const categoriesMap = new Map<number, { name: string; color: string }>()
+  for (const c of categories) {
+    if (c.id !== undefined) categoriesMap.set(c.id, { name: c.name, color: c.color })
+  }
 
   const activeMonthData: DayData[] = Array.from({ length: totalDaysInMonth }, (_, i) => {
     const date = i + 1
@@ -213,6 +221,7 @@ function App() {
       timestamp,
       type: mode,
       durationMinutes: Math.floor(elapsed / 60),
+      categoryId: mode === 'study' ? timerCategoryId : undefined,
     })
     const firstUncompleted = sessionTasks.find(t => !t.completed)
     if (firstUncompleted && firstUncompleted.id !== undefined) {
@@ -234,10 +243,10 @@ function App() {
     playAlertSound(soundEnabled)
   }
 
-  function handleAddTask(text: string) {
+  function handleAddTask(text: string, categoryId?: number) {
     const trimmed = text.trim()
     if (!trimmed) return
-    addTask(trimmed)
+    addTask(trimmed, categoryId)
   }
 
   function handleToggleTask(id: number) {
@@ -283,23 +292,31 @@ function App() {
     await db.history.clear()
     await db.daily_logs.clear()
     await db.settings.clear()
+    await db.categories.clear()
     await db.settings.bulkAdd([
       { key: 'dailyGoalMinutes', value: 480 },
       { key: 'soundEnabled', value: true },
     ])
+    await db.categories.bulkAdd([
+      { name: 'General', color: '#64748B' },
+      { name: 'Development', color: '#3B82F6' },
+      { name: 'Mathematics', color: '#8B5CF6' },
+    ])
     setSecondsElapsed(0)
     setIsTimerActive(false)
     setTimerMode('study')
+    setTimerCategoryId(undefined)
   }
 
   async function exportUserData() {
-    const [tasks, history, dailyLogs, settings] = await Promise.all([
+    const [tasks, history, dailyLogs, settings, categories] = await Promise.all([
       db.tasks.toArray(),
       db.history.toArray(),
       db.daily_logs.toArray(),
       db.settings.toArray(),
+      db.categories.toArray(),
     ])
-    const data = { version: 1, exportedAt: new Date().toISOString(), tasks, history, dailyLogs, settings }
+    const data = { version: 1, exportedAt: new Date().toISOString(), tasks, history, dailyLogs, settings, categories }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -328,6 +345,10 @@ function App() {
       if (Array.isArray(data.settings)) {
         await db.settings.clear()
         await db.settings.bulkAdd(data.settings)
+      }
+      if (Array.isArray(data.categories)) {
+        await db.categories.clear()
+        await db.categories.bulkAdd(data.categories)
       }
     } catch { /* malformed */ }
   }
@@ -453,7 +474,22 @@ function App() {
                       Break
                     </button>
                   </div>
-                  <div className="h-5 w-px bg-border-subtle" />
+                  {timerMode === 'study' && (
+                    <>
+                      <select
+                        value={timerCategoryId ?? ''}
+                        onChange={e => setTimerCategoryId(e.target.value ? Number(e.target.value) : undefined)}
+                        className="max-w-[90px] rounded border border-border-subtle bg-surface px-1 py-0.5 text-[11px] text-text-primary outline-none"
+                      >
+                        <option value="">Subject</option>
+                        {categories.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                      <div className="h-5 w-px bg-border-subtle" />
+                    </>
+                  )}
+                  {timerMode !== 'study' && <div className="h-5 w-px bg-border-subtle" />}
                   <span className="min-w-[40px] text-xs font-medium text-text-secondary tabular-nums">
                     {String(Math.floor(secondsElapsed / 60)).padStart(2, '0')}:{String(secondsElapsed % 60).padStart(2, '0')}
                   </span>
@@ -481,10 +517,19 @@ function App() {
                       type="text"
                       placeholder="Add a task..."
                       className="flex-1 rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent-blue/50"
-                      onKeyDown={(e) => { if (e.key === 'Enter') { handleAddTask((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = '' } }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { const sel = document.querySelector<HTMLSelectElement>('[data-task-category]'); handleAddTask((e.target as HTMLInputElement).value, sel?.value ? Number(sel.value) : undefined); (e.target as HTMLInputElement).value = '' } }}
                     />
+                    <select
+                      data-task-category
+                      className="w-24 rounded-lg border border-border-subtle bg-surface px-1.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent-blue/50"
+                    >
+                      <option value="">No category</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
                     <button
-                      onClick={() => { const input = document.querySelector<HTMLInputElement>('[data-task-input]'); if (input) { handleAddTask(input.value); input.value = '' } }}
+                      onClick={() => { const input = document.querySelector<HTMLInputElement>('[data-task-input]'); const sel = document.querySelector<HTMLSelectElement>('[data-task-category]'); if (input) { handleAddTask(input.value, sel?.value ? Number(sel.value) : undefined); input.value = '' } }}
                       className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20"
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -506,6 +551,9 @@ function App() {
                           >
                             {task.completed && <Check className="h-3 w-3 text-accent-blue" />}
                           </div>
+                          {task.categoryId !== undefined && categoriesMap.has(task.categoryId) && (
+                            <div className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoriesMap.get(task.categoryId)!.color }} />
+                          )}
                           <span className={`truncate text-xs ${task.completed ? 'text-text-muted line-through' : 'text-text-primary'}`}>
                             {task.text}
                           </span>
@@ -668,6 +716,45 @@ function App() {
                 </div>
                 <div className="mt-3 h-0.5 w-full max-w-[200px] rounded-full bg-accent-green/60" />
               </div>
+            </div>
+            {/* Category Breakdown */}
+            <div className="mt-6 border-t border-border-subtle pt-5">
+              <p className="mb-4 text-sm font-semibold text-text-primary">Category Hours</p>
+              {categoryBreakdown.length > 0 ? (
+                <div className="flex items-center gap-6">
+                  <PieChart width={130} height={130}>
+                    <Pie
+                      data={categoryBreakdown}
+                      dataKey="hours"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={32}
+                      outerRadius={55}
+                      paddingAngle={2}
+                      stroke="none"
+                    >
+                      {categoryBreakdown.map((entry, index) => (
+                        <Cell key={index} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                  <div className="flex flex-col gap-2">
+                    {categoryBreakdown.map((item, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                        <span className="text-text-primary">{item.name}</span>
+                        <span className="text-text-muted">{item.hours}h</span>
+                        <span className="text-text-muted">({item.percentage}%)</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="py-4 text-center text-xs italic text-text-muted">
+                  No category distributions recorded yet. Start a session to see your subject breakdown!
+                </p>
+              )}
             </div>
           </div>
         </div>

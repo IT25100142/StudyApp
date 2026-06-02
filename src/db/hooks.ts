@@ -1,12 +1,12 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './db'
-import type { HistoryEntry, SettingsKey } from './types'
+import type { HistoryEntry, SettingsKey, CategoryItem } from './types'
 
 export function useTasks() {
   const tasks = useLiveQuery(() => db.tasks.orderBy('id').reverse().toArray())
 
-  const addTask = async (text: string) => {
-    await db.tasks.add({ text, completed: false, createdAt: Date.now() })
+  const addTask = async (text: string, categoryId?: number) => {
+    await db.tasks.add({ text, completed: false, createdAt: Date.now(), categoryId })
   }
 
   const toggleTask = async (id: number) => {
@@ -21,6 +21,81 @@ export function useTasks() {
     addTask,
     toggleTask,
     isLoading: tasks === undefined,
+  }
+}
+
+export function useCategories() {
+  const categories = useLiveQuery(() => db.categories.toArray())
+
+  const addCategory = async (name: string, color: string) => {
+    await db.categories.add({ name, color })
+  }
+
+  const deleteCategory = async (id: number) => {
+    await db.categories.delete(id)
+  }
+
+  const seedDefaults = async () => {
+    const count = await db.categories.count()
+    if (count === 0) {
+      await db.categories.bulkAdd([
+        { name: 'General', color: '#64748B' },
+        { name: 'Development', color: '#3B82F6' },
+        { name: 'Mathematics', color: '#8B5CF6' },
+      ])
+    }
+  }
+
+  if (categories !== undefined && categories.length === 0) {
+    seedDefaults()
+  }
+
+  return {
+    categories: categories ?? [],
+    addCategory,
+    deleteCategory,
+    isLoading: categories === undefined,
+  }
+}
+
+export function useCategoryBreakdown() {
+  const allHistory = useLiveQuery(() => db.history.toArray())
+  const categories = useLiveQuery(() => db.categories.toArray())
+
+  if (allHistory === undefined || categories === undefined) {
+    return { breakdown: [], totalHours: 0, isLoading: true }
+  }
+
+  const catMap = new Map<number, CategoryItem>()
+  for (const c of categories) {
+    if (c.id !== undefined) catMap.set(c.id, c)
+  }
+
+  const grouped = new Map<number | undefined, number>()
+  for (const entry of allHistory) {
+    if (entry.type !== 'study') continue
+    const key = entry.categoryId
+    grouped.set(key, (grouped.get(key) ?? 0) + entry.durationMinutes)
+  }
+
+  const totalDuration = Array.from(grouped.values()).reduce((s, v) => s + v, 0)
+
+  const breakdown = Array.from(grouped.entries())
+    .map(([catId, minutes]) => {
+      const cat = catId !== undefined ? catMap.get(catId) : undefined
+      return {
+        name: cat?.name ?? 'Uncategorized',
+        color: cat?.color ?? '#64748B',
+        hours: parseFloat((minutes / 60).toFixed(1)),
+        percentage: totalDuration > 0 ? Math.round((minutes / totalDuration) * 100) : 0,
+      }
+    })
+    .sort((a, b) => b.hours - a.hours)
+
+  return {
+    breakdown,
+    totalHours: parseFloat((totalDuration / 60).toFixed(1)),
+    isLoading: false,
   }
 }
 
