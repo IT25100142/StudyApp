@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, Plus, Settings, X } from 'lucide-react'
+import { Brain, BookOpen, Zap, Clock, BarChart3, Target, Flame, Calendar, Award, Coffee, Play, Pause, Check, CheckCircle, Plus, Settings, X } from 'lucide-react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { useTasks, useHistory, useSettings, useTodayLog, useMonthLogs, useCategories, useCategoryBreakdown, useStreak, useXpLevel } from './db/hooks'
+import { useTasks, useHistory, useSettings, useTodayLog, useMonthLogs, useCategories, useCategoryBreakdown, useStreak, useXpLevel, useProductivityInsights } from './db/hooks'
 import { db } from './db/db'
 
 let audioCtx: AudioContext | null = null
@@ -103,6 +103,7 @@ function App() {
   const { breakdown: categoryBreakdown, isLoading: breakdownLoading } = useCategoryBreakdown()
   const { currentStreak, isLoading: streakLoading } = useStreak()
   const { level, currentLevelXP, xpProgressPercent, isLoading: xpLoading } = useXpLevel()
+  const { topSubject, avgMin, completionRate, peakDay, isLoading: insightsLoading } = useProductivityInsights()
   const [timerCategoryId, setTimerCategoryId] = useState<number | undefined>(undefined)
 
   const [selectedDay, setSelectedDay] = useState(() => new Date().getDate())
@@ -117,7 +118,7 @@ function App() {
   incStudyRef.current = incrementStudy
   incBreakRef.current = incrementBreak
 
-  const isDataReady = !(tasksLoading || historyLoading || settingsLoading || todayLogLoading || monthLogsLoading || categoriesLoading || breakdownLoading || streakLoading || xpLoading)
+  const isDataReady = !(tasksLoading || historyLoading || settingsLoading || todayLogLoading || monthLogsLoading || categoriesLoading || breakdownLoading || streakLoading || xpLoading || insightsLoading)
 
   const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay()
   const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
@@ -666,6 +667,26 @@ function App() {
                     <p className="text-xs text-text-muted">No study data available for this week yet.</p>
                   </div>
                 )}
+              </div>
+            </div>
+            {/* Productivity Insights */}
+            <div className="mt-5 border-t border-border-subtle pt-5">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Productivity Insights</p>
+              <div className="grid grid-cols-4 gap-4">
+                {[
+                  { label: 'TOP SUBJECT', value: topSubject, icon: <Award className="h-3.5 w-3.5 text-accent-purple" />, valueClass: 'text-accent-purple' },
+                  { label: 'AVG SESSION', value: `${avgMin} min`, icon: <Clock className="h-3.5 w-3.5 text-accent-blue" />, valueClass: 'text-accent-blue' },
+                  { label: 'COMPLETION', value: `${completionRate}%`, icon: <CheckCircle className="h-3.5 w-3.5 text-accent-green" />, valueClass: 'text-accent-green' },
+                  { label: 'PEAK DAY', value: peakDay, icon: <Calendar className="h-3.5 w-3.5 text-accent-amber" />, valueClass: 'text-accent-amber' },
+                ].map(m => (
+                  <div key={m.label} className="rounded-lg border border-border-subtle bg-surface/40 p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      {m.icon}
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{m.label}</span>
+                    </div>
+                    <p className={`text-sm font-bold ${m.valueClass}`}>{m.value}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
