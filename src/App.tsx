@@ -820,41 +820,45 @@ function App() {
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <div className="flex-1 overflow-y-auto min-h-[100px] space-y-0.5">
+                  <div className="flex-1 overflow-y-auto min-h-[100px]">
                     {sessionTasks.length === 0 ? (
-                      <p className="py-3 text-center text-xs italic text-slate-400">
-                        No focus tasks planned for today. Add an objective above to get started!
-                      </p>
+                      <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-800/40 rounded-xl bg-slate-900/10 p-6 my-2 text-center transition-all">
+                        <p className="text-xs text-slate-400 max-w-[240px] leading-relaxed">
+                          🎯 No focus tasks planned for today. Add an objective above to kick off your session!
+                        </p>
+                      </div>
                     ) : (
-                      sessionTasks.map(task => (
-                        <div
-                          key={task.id}
-                          onClick={() => { if (!task.completed) setActiveTaskId(activeTaskId === task.id ? null : task.id!) }}
-                          className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors cursor-pointer ${
-                            activeTaskId === task.id
-                              ? 'bg-accent-blue/10 ring-1 ring-accent-blue/30'
-                              : 'hover:bg-surface/50'
-                          }`}
-                        >
+                      <div className="space-y-0.5">
+                        {sessionTasks.map(task => (
                           <div
-                            onClick={e => { e.stopPropagation(); handleToggleTask(task.id!) }}
-                            className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border ${
-                              task.completed ? 'border-accent-blue bg-accent-blue/20' : 'border-border-subtle bg-surface'
+                            key={task.id}
+                            onClick={() => { if (!task.completed) setActiveTaskId(activeTaskId === task.id ? null : task.id!) }}
+                            className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors cursor-pointer ${
+                              activeTaskId === task.id
+                                ? 'bg-accent-blue/10 ring-1 ring-accent-blue/30'
+                                : 'hover:bg-surface/50'
                             }`}
                           >
-                            {task.completed && <Check className="h-3 w-3 text-accent-blue" />}
+                            <div
+                              onClick={e => { e.stopPropagation(); handleToggleTask(task.id!) }}
+                              className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border ${
+                                task.completed ? 'border-accent-blue bg-accent-blue/20' : 'border-border-subtle bg-surface'
+                              }`}
+                            >
+                              {task.completed && <Check className="h-3 w-3 text-accent-blue" />}
+                            </div>
+                            {task.categoryId !== undefined && categoriesMap.has(task.categoryId) && (
+                              <div className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoriesMap.get(task.categoryId)!.color }} />
+                            )}
+                            <span className={`flex-1 truncate text-xs ${task.completed ? 'text-slate-400 line-through' : 'text-text-primary'}`}>
+                              {task.text}
+                            </span>
+                            <span className="shrink-0 text-[11px] text-slate-400">
+                              🍅 {task.actualPomodoros ?? 0}/{task.estimatedPomodoros ?? 1}
+                            </span>
                           </div>
-                          {task.categoryId !== undefined && categoriesMap.has(task.categoryId) && (
-                            <div className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: categoriesMap.get(task.categoryId)!.color }} />
-                          )}
-                          <span className={`flex-1 truncate text-xs ${task.completed ? 'text-slate-400 line-through' : 'text-text-primary'}`}>
-                            {task.text}
-                          </span>
-                          <span className="shrink-0 text-[11px] text-slate-400">
-                            🍅 {task.actualPomodoros ?? 0}/{task.estimatedPomodoros ?? 1}
-                          </span>
-                        </div>
-                      ))
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
